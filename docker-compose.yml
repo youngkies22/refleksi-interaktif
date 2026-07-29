@@ -1,0 +1,64 @@
+name: refleksi
+
+services:
+  app:
+    build: .
+    image: refleksi:local
+    restart: unless-stopped
+    ports:
+      # Kiri = port di host (bisa ditimpa lewat PORT di .env), kanan = port di
+      # dalam container yang SELALU 8080 — healthcheck & Dockerfile ikut angka itu.
+      - "${PORT:-4001}:8080"
+    environment:
+      NODE_ENV: production
+      REDIS_URL: redis://redis:6379
+      APP_NAMA: ${APP_NAMA:-Refleksi}
+      # Setel true HANYA kalau reverse proxy sudah menyajikan https dengan
+      # sertifikat valid. Kalau diakses lewat http://, biarkan false — kalau
+      # tidak, browser dipaksa mengambil CSS/JS lewat https dan halaman rusak.
+      PAKAI_HTTPS: ${PAKAI_HTTPS:-false}
+      # Akun admin awal, dibuat HANYA saat database masih kosong (boot pertama).
+      # Pada instalasi yang databasenya sudah berisi akun, kedua nilai ini
+      # diabaikan — ganti lewat menu "Profil Saya" atau panel Kelola Guru.
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-smkbudut}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-smkbudut}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      # Snapshot database utuh (beda dari backup JSON manual di panel admin):
+      # sekali sehari, simpan 7 terakhir — cukup buat jaring pengaman seminggu
+      # tanpa disk membengkak. Bisa dipicu manual kapan saja dari panel admin.
+      BACKUP_TIAP_MENIT: ${BACKUP_TIAP_MENIT:-1440}
+      BACKUP_SIMPAN_TERAKHIR: ${BACKUP_SIMPAN_TERAKHIR:-7}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      # Named volume, BUKAN bind-mount ke path Windows — file locking SQLite
+      # lewat bind-mount Windows lambat dan rawan SQLITE_BUSY. Volume ini pula
+      # yang membuat data selamat walau image di-build ulang berkali-kali.
+      - refleksi_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/sehat').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "100"]
+    volumes:
+      - refleksi_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  refleksi_data:
+    name: refleksi_data
+  refleksi_redis:
+    name: refleksi_redis
