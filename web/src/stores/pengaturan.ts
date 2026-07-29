@@ -16,8 +16,10 @@ export const usePengaturanStore = defineStore('pengaturan', () => {
   const logoUrl = ref<string | null>(null);
   const dimuat = ref(false);
 
-  function terapkanJudulTab(): void {
+  function terapkanBranding(): void {
     document.title = `${namaAplikasi.value} — Media Interaktif Kelas`;
+    const favicon = document.querySelector<HTMLLinkElement>('#favicon');
+    if (favicon) favicon.href = logoUrl.value ?? '/favicon.svg';
   }
 
   async function muat(): Promise<void> {
@@ -29,16 +31,16 @@ export const usePengaturanStore = defineStore('pengaturan', () => {
       // biarkan nilai bawaan — jangan sampai kegagalan ini memblokir apa pun
     } finally {
       dimuat.value = true;
-      terapkanJudulTab();
+      terapkanBranding();
     }
   }
 
   /** Dipanggil setelah admin mengubah nama/logo, supaya seluruh UI (termasuk
-   *  tab judul) langsung ikut berubah tanpa perlu reload halaman. */
+   *  tab judul & ikon tab) langsung ikut berubah tanpa perlu reload halaman. */
   function terapkan(p: { namaAplikasi: string; logoUrl: string | null }): void {
     namaAplikasi.value = p.namaAplikasi;
     logoUrl.value = p.logoUrl;
-    terapkanJudulTab();
+    terapkanBranding();
   }
 
   return { namaAplikasi, logoUrl, dimuat, muat, terapkan };
