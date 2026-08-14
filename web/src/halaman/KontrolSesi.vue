@@ -110,10 +110,16 @@ onUnmounted(() => {
       <p v-if="memuat" class="text-slate-400">Membuka kontrol...</p>
       <p v-else-if="galat" class="text-red-300">{{ galat }}</p>
       <div v-else-if="!kondisi?.slide" class="text-slate-400">Belum ada slide aktif.</div>
-      <div v-else>
+      <div v-else class="space-y-3">
         <p class="text-sm text-slate-400">{{ metaTipeDari(kondisi.slide.tipe).ikon }} {{ metaTipeDari(kondisi.slide.tipe).label }}</p>
-        <p class="text-xl font-semibold mt-2">{{ kondisi.slide.pertanyaan || '(pertanyaan belum diisi)' }}</p>
-        <p class="text-xs text-slate-500 mt-3">Slide {{ indexAktif + 1 }} / {{ daftarSlide.length }}</p>
+
+        <!-- Gambar pertanyaan di kontrol -->
+        <div v-if="(kondisi.slide.konfig as any).gambar_pertanyaan" class="rounded-lg overflow-hidden bg-slate-700 p-2 flex justify-center max-w-xs">
+          <img :src="(kondisi.slide.konfig as any).gambar_pertanyaan" alt="Gambar pertanyaan" class="max-h-32 max-w-full object-contain rounded" />
+        </div>
+
+        <p class="text-xl font-semibold">{{ kondisi.slide.pertanyaan || '(pertanyaan belum diisi)' }}</p>
+        <p class="text-xs text-slate-500">Slide {{ indexAktif + 1 }} / {{ daftarSlide.length }}</p>
       </div>
     </main>
 

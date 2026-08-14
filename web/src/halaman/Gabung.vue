@@ -220,7 +220,13 @@ onUnmounted(() => {
         <p class="text-slate-400 text-center">Menunggu guru membuka pertanyaan...</p>
       </template>
       <template v-else>
-        <p class="text-sm text-slate-400 mb-2 text-center">{{ metaTipeDari(kondisi.slide.tipe).ikon }} {{ metaTipeDari(kondisi.slide.tipe).label }}</p>
+        <p class="text-sm text-slate-400 mb-3 text-center">{{ metaTipeDari(kondisi.slide.tipe).ikon }} {{ metaTipeDari(kondisi.slide.tipe).label }}</p>
+
+        <!-- Gambar pertanyaan -->
+        <div v-if="(kondisi.slide.konfig as any).gambar_pertanyaan" class="mb-4 rounded-2xl overflow-hidden bg-slate-100 p-2 flex justify-center">
+          <img :src="(kondisi.slide.konfig as any).gambar_pertanyaan" alt="Gambar pertanyaan" class="max-h-64 max-w-full object-contain rounded-lg" />
+        </div>
+
         <h1 class="text-xl font-bold text-slate-800 mb-4 text-center">{{ kondisi.slide.pertanyaan }}</h1>
 
         <p v-if="galat" class="text-sm text-red-600 mb-3 text-center">{{ galat }}</p>

@@ -322,6 +322,12 @@ onUnmounted(() => {
           <p class="inline-flex items-center gap-1.5 text-sm text-slate-300 bg-white/10 rounded-full px-3 py-1">
             {{ metaTipeDari(kondisi.slide.tipe).ikon }} {{ metaTipeDari(kondisi.slide.tipe).label }}
           </p>
+
+          <!-- Gambar pertanyaan presenter -->
+          <div v-if="(kondisi.slide.konfig as any).gambar_pertanyaan" class="rounded-2xl overflow-hidden bg-white/5 p-3 border border-white/10 flex justify-center">
+            <img :src="(kondisi.slide.konfig as any).gambar_pertanyaan" alt="Gambar pertanyaan" class="max-h-96 max-w-full object-contain rounded-lg" />
+          </div>
+
           <h1 class="text-2xl sm:text-4xl font-bold leading-tight">{{ kondisi.slide.pertanyaan || '(pertanyaan belum diisi)' }}</h1>
 
           <div v-if="slideAdalahMenti" class="text-left bg-white text-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl">

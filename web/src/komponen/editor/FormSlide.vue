@@ -35,10 +35,13 @@ const konfigMaksKata = ref(3);
 const konfigJawabanDiterima = ref(''); // satu baris = satu jawaban alternatif
 const konfigCocokPersis = ref(false);
 const konfigPoinParsial = ref(true);
-const konfigGambarPath = ref('');
+const konfigGambarPath = ref(''); // untuk pin_jawaban: gambar yang di-mark area jawaban
 const konfigAreaBenar = ref<AreaBenar | undefined>(undefined);
+const konfigGambarPertanyaan = ref(''); // untuk semua tipe: gambar pertanyaan
 const mengunggah = ref(false);
 const galatUnggah = ref('');
+const mengunggahGambarPertanyaan = ref(false);
+const galatUnggahGambarPertanyaan = ref('');
 
 function muatDariSlide(s: Slide): void {
   pertanyaan.value = s.pertanyaan;
@@ -54,6 +57,7 @@ function muatDariSlide(s: Slide): void {
   konfigPoinParsial.value = s.konfig.poin_parsial ?? true;
   konfigGambarPath.value = s.konfig.gambar_path ?? '';
   konfigAreaBenar.value = s.konfig.area_benar;
+  konfigGambarPertanyaan.value = (s.konfig as any).gambar_pertanyaan ?? '';
 }
 
 async function unggahGambar(e: Event): Promise<void> {
@@ -98,6 +102,47 @@ async function prosesUnggahGambar(berkas: File): Promise<void> {
   }
 }
 
+async function unggahGambarPertanyaan(e: Event): Promise<void> {
+  const berkas = (e.target as HTMLInputElement).files?.[0];
+  if (!berkas) return;
+  await prosesUnggahGambarPertanyaan(berkas);
+}
+
+function onDropGambarPertanyaan(e: DragEvent): void {
+  e.preventDefault();
+  const el = e.currentTarget as HTMLElement;
+  el.classList.remove('border-blue-400', 'bg-blue-50');
+  const berkas = e.dataTransfer?.files?.[0];
+  if (berkas) prosesUnggahGambarPertanyaan(berkas);
+}
+
+async function prosesUnggahGambarPertanyaan(berkas: File): Promise<void> {
+  // Validasi tipe file
+  const tipeYangDiizinkan = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  if (!tipeYangDiizinkan.includes(berkas.type)) {
+    galatUnggahGambarPertanyaan.value = 'Tipe file tidak didukung. Gunakan PNG, JPEG, WebP, atau GIF.';
+    return;
+  }
+
+  // Validasi ukuran (max 10 MB)
+  const MAX_SIZE = 10 * 1024 * 1024;
+  if (berkas.size > MAX_SIZE) {
+    galatUnggahGambarPertanyaan.value = `Ukuran file terlalu besar. Maksimal 10 MB.`;
+    return;
+  }
+
+  mengunggahGambarPertanyaan.value = true;
+  galatUnggahGambarPertanyaan.value = '';
+  try {
+    const r = await apiUnggah.gambar(berkas);
+    konfigGambarPertanyaan.value = r.path;
+  } catch (e) {
+    galatUnggahGambarPertanyaan.value = e instanceof GalatApi ? e.message : 'Gagal mengunggah gambar.';
+  } finally {
+    mengunggahGambarPertanyaan.value = false;
+  }
+}
+
 watch(() => props.slide.id, () => muatDariSlide(props.slide), { immediate: true });
 
 function tambahOpsi(): void {
@@ -117,6 +162,8 @@ function simpan(): void {
   const payload: UbahSlideInput = {
     pertanyaan: pertanyaan.value,
     konfig: {
+      // Gambar pertanyaan bisa di semua tipe soal
+      ...(konfigGambarPertanyaan.value ? { gambar_pertanyaan: konfigGambarPertanyaan.value } : {}),
       ...(meta.value.keluarga === 'kahoot' ? { batas_detik: konfigBatasDetik.value } : {}),
       ...(props.slide.tipe === 'skala'
         ? { min: konfigMin.value, maks: konfigMaks.value, label_min: konfigLabelMin.value, label_maks: konfigLabelMaks.value }
@@ -154,7 +201,8 @@ function simpan(): void {
       <span class="text-slate-400">— {{ meta.keterangan }}</span>
     </div>
 
-    <div>
+    <!-- Pertanyaan dengan opsional gambar -->
+    <div class="space-y-3">
       <label class="block text-sm font-medium text-slate-600 mb-1">Pertanyaan</label>
       <textarea
         v-model="pertanyaan"
@@ -163,7 +211,67 @@ function simpan(): void {
         class="w-full rounded-lg border border-slate-300 py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
         placeholder="Tulis pertanyaan untuk slide ini..."
       />
-      <p class="text-xs text-slate-400 mt-1">{{ pertanyaan.length }}/{{ BATAS.pertanyaan }}</p>
+      <p class="text-xs text-slate-400">{{ pertanyaan.length }}/{{ BATAS.pertanyaan }}</p>
+
+      <!-- Upload gambar untuk pertanyaan -->
+      <div class="space-y-3 pt-2 border-t border-slate-200">
+        <label class="block text-sm font-medium text-slate-700">📸 Gambar Pertanyaan (Opsional)</label>
+
+        <!-- Preview gambar -->
+        <div v-if="konfigGambarPertanyaan" class="space-y-2">
+          <div class="relative inline-block max-w-full">
+            <img :src="konfigGambarPertanyaan" class="max-h-48 max-w-full rounded-xl border-2 border-blue-300 bg-blue-50" />
+            <button
+              type="button"
+              class="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white text-sm leading-none shadow-md transition-colors"
+              title="Hapus gambar"
+              @click="konfigGambarPertanyaan = ''"
+            >
+              ✕
+            </button>
+          </div>
+          <button
+            type="button"
+            class="text-xs text-slate-500 hover:text-blue-600 transition-colors"
+            @click="konfigGambarPertanyaan = ''"
+          >
+            🔄 Ganti gambar
+          </button>
+        </div>
+
+        <!-- Upload area -->
+        <div v-else class="space-y-2">
+          <div
+            class="relative border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+            @click="($refs.inputGambarPertanyaan as any)?.click?.()"
+            @dragover.prevent="(e) => (e.currentTarget as HTMLElement).classList.add('border-blue-400', 'bg-blue-50')"
+            @dragleave.prevent="(e) => (e.currentTarget as HTMLElement).classList.remove('border-blue-400', 'bg-blue-50')"
+            @drop="onDropGambarPertanyaan"
+          >
+            <input
+              ref="inputGambarPertanyaan"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              class="hidden"
+              :disabled="mengunggahGambarPertanyaan"
+              @change="unggahGambarPertanyaan"
+            />
+            <div v-if="!mengunggahGambarPertanyaan" class="space-y-1">
+              <p class="text-2xl">🖼️</p>
+              <p class="text-sm font-medium text-slate-700">Klik atau tarik gambar di sini</p>
+              <p class="text-xs text-slate-500">PNG, JPEG, WebP, GIF (Max 10 MB)</p>
+            </div>
+            <div v-else class="space-y-1">
+              <p class="text-2xl">⏳</p>
+              <p class="text-sm font-medium text-slate-600">Mengunggah gambar...</p>
+            </div>
+          </div>
+          <p v-if="galatUnggahGambarPertanyaan" class="text-xs text-red-600 bg-red-50 rounded-lg p-2 flex items-start gap-2">
+            <span>⚠️</span>
+            <span>{{ galatUnggahGambarPertanyaan }}</span>
+          </p>
+        </div>
+      </div>
     </div>
 
     <!-- Konfigurasi Kahoot: timer -->
