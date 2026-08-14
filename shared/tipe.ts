@@ -299,6 +299,24 @@ export interface PengaturanAplikasi {
   logoUrl: string | null;
 }
 
+/** Konfigurasi object storage S3 — diatur superadmin lewat panel Kelola Guru.
+ *  `secretKeyDiatur` cuma penanda ada/tidaknya; nilai secret-nya sendiri
+ *  TIDAK PERNAH dikirim balik ke browser setelah tersimpan. */
+export interface PengaturanS3Admin {
+  endpoint: string;
+  region: string;
+  bucket: string;
+  accessKey: string;
+  /** Override URL publik — kosong = turunkan dari endpoint+bucket (cocok utk
+   *  NevaObjects/MinIO/dll). WAJIB diisi untuk Cloudflare R2 (custom domain
+   *  atau subdomain `*.r2.dev`) karena endpoint S3 R2 sendiri bersifat privat. */
+  urlPublik: string;
+  secretKeyDiatur: boolean;
+  /** true kalau endpoint/bucket/accessKey/secretKey terisi — gambar baru
+   *  diunggah ke S3; false = disk lokal. */
+  aktif: boolean;
+}
+
 /** Bentuk galat yang konsisten di seluruh API dan event socket. */
 export interface GalatKirim {
   kode: string;

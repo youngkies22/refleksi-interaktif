@@ -204,6 +204,7 @@ const LABEL_AKSI: Record<string, string> = {
   hapus_akun: '🗑 Akun dihapus',
   pulihkan_backup: '♻ Database dipulihkan',
   ubah_pengaturan: '🎨 Branding diubah',
+  ubah_pengaturan_s3: '☁️ Konfigurasi S3 diubah',
 };
 
 /* ────────────────── Branding aplikasi (nama tab & logo) ────────────────── */
@@ -259,6 +260,106 @@ async function hapusLogo(): Promise<void> {
     await muatLog();
   } catch (e) {
     galat.value = e instanceof GalatApi ? e.message : 'Gagal menghapus logo.';
+  }
+}
+
+/* ────────────────── Object storage S3 (gambar unggahan) ────────────────── */
+
+const s3Form = reactive({ endpoint: '', region: 'us-east-1', bucket: '', accessKey: '', secretKey: '', urlPublik: '' });
+const s3SecretKeyDiatur = ref(false);
+const s3Aktif = ref(false);
+const s3Memuat = ref(true);
+const s3Menyimpan = ref(false);
+const s3Menguji = ref(false);
+const s3HasilUji = ref<{ ok: boolean; pesan: string } | null>(null);
+
+/** Cloudflare R2: endpoint S3-nya privat, gambar TIDAK BISA disajikan dari
+ *  situ langsung — beda dari penyedia lain (NevaObjects/MinIO/dll) yang
+ *  endpoint-nya memang publik. Dipakai untuk menandai "URL Publik" wajib
+ *  diisi, murni bantuan visual di form (validasi sesungguhnya di server). */
+const s3AdalahR2 = computed(() => s3Form.endpoint.includes('.r2.cloudflarestorage.com'));
+
+async function muatS3(): Promise<void> {
+  s3Memuat.value = true;
+  try {
+    const r = await apiAdmin.ambilPengaturanS3();
+    s3Form.endpoint = r.pengaturan.endpoint;
+    s3Form.region = r.pengaturan.region;
+    s3Form.bucket = r.pengaturan.bucket;
+    s3Form.accessKey = r.pengaturan.accessKey;
+    s3Form.secretKey = '';
+    s3Form.urlPublik = r.pengaturan.urlPublik;
+    s3SecretKeyDiatur.value = r.pengaturan.secretKeyDiatur;
+    s3Aktif.value = r.pengaturan.aktif;
+  } catch (e) {
+    galat.value = e instanceof GalatApi ? e.message : 'Gagal memuat pengaturan object storage.';
+  } finally {
+    s3Memuat.value = false;
+  }
+}
+onMounted(muatS3);
+
+async function simpanS3(): Promise<void> {
+  galat.value = '';
+  s3HasilUji.value = null;
+  s3Menyimpan.value = true;
+  try {
+    const r = await apiAdmin.ubahPengaturanS3({
+      endpoint: s3Form.endpoint,
+      region: s3Form.region,
+      bucket: s3Form.bucket,
+      accessKey: s3Form.accessKey,
+      secretKey: s3Form.secretKey || undefined,
+      urlPublik: s3Form.urlPublik,
+    });
+    s3SecretKeyDiatur.value = r.pengaturan.secretKeyDiatur;
+    s3Aktif.value = r.pengaturan.aktif;
+    s3Form.secretKey = '';
+    await muatLog();
+  } catch (e) {
+    galat.value = e instanceof GalatApi ? e.message : 'Gagal menyimpan pengaturan object storage.';
+  } finally {
+    s3Menyimpan.value = false;
+  }
+}
+
+async function hapusS3(): Promise<void> {
+  if (!confirm('Hapus konfigurasi S3? Gambar baru akan kembali disimpan di disk lokal server.')) return;
+  galat.value = '';
+  s3HasilUji.value = null;
+  try {
+    const r = await apiAdmin.hapusPengaturanS3();
+    s3Form.endpoint = '';
+    s3Form.region = r.pengaturan.region;
+    s3Form.bucket = '';
+    s3Form.accessKey = '';
+    s3Form.secretKey = '';
+    s3Form.urlPublik = '';
+    s3SecretKeyDiatur.value = false;
+    s3Aktif.value = false;
+    await muatLog();
+  } catch (e) {
+    galat.value = e instanceof GalatApi ? e.message : 'Gagal menghapus pengaturan object storage.';
+  }
+}
+
+async function ujiS3(): Promise<void> {
+  s3Menguji.value = true;
+  s3HasilUji.value = null;
+  try {
+    await apiAdmin.ujiPengaturanS3({
+      endpoint: s3Form.endpoint,
+      region: s3Form.region,
+      bucket: s3Form.bucket,
+      accessKey: s3Form.accessKey,
+      secretKey: s3Form.secretKey || undefined,
+      urlPublik: s3Form.urlPublik,
+    });
+    s3HasilUji.value = { ok: true, pesan: 'Berhasil — unggah, akses publik, dan hapus berkas uji semua lancar.' };
+  } catch (e) {
+    s3HasilUji.value = { ok: false, pesan: e instanceof GalatApi ? e.message : 'Uji koneksi gagal.' };
+  } finally {
+    s3Menguji.value = false;
   }
 }
 
@@ -524,6 +625,126 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
               </button>
             </div>
           </div>
+        </section>
+
+        <section class="bg-white rounded-2xl border border-slate-200 p-6">
+          <h2 class="text-lg font-semibold text-slate-700 mb-1">☁️ Object Storage (S3)</h2>
+          <p class="text-xs text-slate-400 mb-4">
+            Tempat gambar unggahan (slide pin-jawaban, logo, lampiran kartu papan) disimpan — gambar dikompres
+            otomatis sebelum diunggah. Kompatibel dengan penyedia S3 mana pun (NevaObjects, Cloudflare R2, MinIO,
+            dll). Kosongkan semua field & hapus untuk kembali menyimpan di disk lokal server.
+          </p>
+
+          <p v-if="s3Memuat" class="text-sm text-slate-400">Memuat...</p>
+          <form v-else class="space-y-3" @submit.prevent="simpanS3">
+            <div class="grid sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Endpoint</label>
+                <input
+                  v-model="s3Form.endpoint"
+                  type="text"
+                  placeholder="https://s3.nevaobjects.id"
+                  class="w-full rounded-xl border border-slate-300 py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p class="text-[11px] text-slate-400 mt-1">
+                  Cloudflare R2: <code>https://&lt;account_id&gt;.r2.cloudflarestorage.com</code>
+                </p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Bucket</label>
+                <input
+                  v-model="s3Form.bucket"
+                  type="text"
+                  placeholder="refleksi"
+                  class="w-full rounded-xl border border-slate-300 py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Region</label>
+                <input
+                  v-model="s3Form.region"
+                  type="text"
+                  :placeholder="s3AdalahR2 ? 'auto' : 'us-east-1'"
+                  class="w-full rounded-xl border border-slate-300 py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p v-if="s3AdalahR2" class="text-[11px] text-amber-600 mt-1">R2 selalu memakai region "auto".</p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-500 mb-1">Access Key</label>
+                <input
+                  v-model="s3Form.accessKey"
+                  type="text"
+                  autocomplete="off"
+                  class="w-full rounded-xl border border-slate-300 py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-slate-500 mb-1">
+                  Secret Key
+                  <span v-if="s3SecretKeyDiatur" class="text-slate-400 font-normal">(sudah diatur — biarkan kosong untuk tidak mengubah)</span>
+                </label>
+                <input
+                  v-model="s3Form.secretKey"
+                  type="password"
+                  autocomplete="new-password"
+                  :placeholder="s3SecretKeyDiatur ? '••••••••••••••••' : ''"
+                  class="w-full rounded-xl border border-slate-300 py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="block text-xs font-medium text-slate-500 mb-1">
+                  URL Publik <span class="text-slate-400 font-normal">(opsional untuk sebagian besar penyedia)</span>
+                </label>
+                <input
+                  v-model="s3Form.urlPublik"
+                  type="text"
+                  placeholder="https://gambar.contohsekolah.sch.id"
+                  class="w-full rounded-xl border border-slate-300 py-2.5 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p class="text-[11px] mt-1" :class="s3AdalahR2 ? 'text-amber-600' : 'text-slate-400'">
+                  <template v-if="s3AdalahR2">
+                    ⚠️ WAJIB diisi untuk R2 — endpoint S3 di atas bersifat privat, tidak bisa jadi sumber gambar
+                    langsung. Isi dengan custom domain atau subdomain <code>*.r2.dev</code> yang di-bind ke bucket ini
+                    (dashboard R2 → bucket → Settings → Public Access).
+                  </template>
+                  <template v-else>Isi kalau bucket disajikan lewat domain/CDN sendiri. Kosongkan untuk memakai URL endpoint+bucket di atas.</template>
+                </p>
+              </div>
+            </div>
+
+            <p class="text-xs" :class="s3Aktif ? 'text-emerald-600' : 'text-slate-400'">
+              {{ s3Aktif ? '● Aktif — gambar baru diunggah ke S3.' : '○ Belum aktif — gambar baru disimpan di disk lokal server.' }}
+            </p>
+            <p v-if="s3HasilUji" class="text-xs" :class="s3HasilUji.ok ? 'text-emerald-600' : 'text-red-600'">
+              {{ s3HasilUji.ok ? '✅' : '❌' }} {{ s3HasilUji.pesan }}
+            </p>
+
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button
+                type="submit"
+                :disabled="s3Menyimpan"
+                class="rounded-xl bg-blue-600 text-white text-sm font-semibold px-5 py-2.5 hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {{ s3Menyimpan ? 'Menyimpan...' : 'Simpan' }}
+              </button>
+              <button
+                type="button"
+                :disabled="s3Menguji"
+                class="rounded-xl border border-slate-300 bg-white text-slate-600 text-sm font-semibold px-4 py-2.5 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                @click="ujiS3"
+              >
+                {{ s3Menguji ? 'Menguji...' : 'Uji Koneksi' }}
+              </button>
+              <button
+                v-if="s3Aktif"
+                type="button"
+                class="text-sm text-slate-400 hover:text-red-600 px-2"
+                @click="hapusS3"
+              >
+                Hapus Konfigurasi
+              </button>
+            </div>
+          </form>
         </section>
 
         <section class="bg-white rounded-2xl border border-slate-200 p-6">

@@ -38,3 +38,38 @@ export function seedAdmin(): void {
 
   log.info({ username: config.adminUsername }, 'Akun admin awal dibuat');
 }
+
+/**
+ * Seed konfigurasi S3 dari env var `S3_*` — dijalankan sekali saat boot bila
+ * kolom `s3_endpoint` di `pengaturan` masih kosong DAN env var-nya diisi.
+ *
+ * Sama seperti `seedAdmin()`: sesudah baris pertama ini terisi (baik dari sini
+ * maupun ditulis admin lewat panel), env var TIDAK dibaca lagi — supaya admin
+ * yang mengubah kredensial lewat panel tidak bingung nilainya "kembali" ke
+ * `.env` lama tiap container di-rebuild.
+ */
+export function seedS3(): void {
+  const db = getDb();
+
+  const baris = db.prepare('SELECT s3_endpoint FROM pengaturan WHERE id = 1').get() as {
+    s3_endpoint: string | null;
+  };
+  if (baris.s3_endpoint) {
+    log.debug('Konfigurasi S3 sudah ada di database, lewati seed dari env');
+    return;
+  }
+  if (!config.s3.aktif) return; // S3_* tidak diisi di env — tetap pakai disk lokal
+
+  db.prepare(
+    `UPDATE pengaturan SET s3_endpoint = ?, s3_region = ?, s3_bucket = ?, s3_access_key = ?, s3_secret_key = ?, s3_url_publik = ? WHERE id = 1`,
+  ).run(
+    config.s3.endpoint,
+    config.s3.region,
+    config.s3.bucket,
+    config.s3.accessKey,
+    config.s3.secretKey,
+    config.s3.urlPublik || null,
+  );
+
+  log.info({ endpoint: config.s3.endpoint, bucket: config.s3.bucket }, 'Konfigurasi S3 di-seed dari env var');
+}

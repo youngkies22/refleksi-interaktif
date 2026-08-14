@@ -6,6 +6,7 @@ import type {
   LogAdminEntri,
   Papan,
   PengaturanAplikasi,
+  PengaturanS3Admin,
   RingkasPapanAdmin,
   RingkasPresentasiAdmin,
 } from '@bersama/tipe';
@@ -35,6 +36,18 @@ export interface DataUbahGuruAdmin {
 export interface HasilImporGuru {
   berhasil: GuruAdmin[];
   gagal: { baris: number; pesan: string }[];
+}
+
+export interface DataUbahS3 {
+  endpoint?: string;
+  region?: string;
+  bucket?: string;
+  accessKey?: string;
+  /** Kosong/tidak diisi = biarkan secret key lama tersimpan. */
+  secretKey?: string;
+  /** Selalu ditulis kalau field ini dikirim (walau string kosong) — beda dari
+   *  field lain di atas. Lihat `DataUbahS3` versi server (layanan/pengaturan.ts). */
+  urlPublik?: string;
 }
 
 interface HasilBagianKonten {
@@ -131,4 +144,12 @@ export const apiAdmin = {
   },
 
   hapusLogo: () => panggil<{ pengaturan: PengaturanAplikasi }>('/api/admin/pengaturan/logo', { method: 'DELETE' }),
+
+  ambilPengaturanS3: () => api.get<{ pengaturan: PengaturanS3Admin }>('/api/admin/pengaturan/s3'),
+
+  ubahPengaturanS3: (data: DataUbahS3) => patch<{ pengaturan: PengaturanS3Admin }>('/api/admin/pengaturan/s3', data),
+
+  hapusPengaturanS3: () => panggil<{ pengaturan: PengaturanS3Admin }>('/api/admin/pengaturan/s3', { method: 'DELETE' }),
+
+  ujiPengaturanS3: (data: DataUbahS3) => panggil<{ ok: true }>('/api/admin/pengaturan/s3/uji', { method: 'POST', body: JSON.stringify(data) }),
 };

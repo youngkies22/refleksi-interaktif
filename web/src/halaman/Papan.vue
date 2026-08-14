@@ -4,20 +4,13 @@ import { BATAS } from '@bersama/konstanta';
 import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import draggable from 'vuedraggable';
 import { useRoute } from 'vue-router';
+import { apiUnggah } from '../api/unggah.js';
+import { GalatApi } from '../api/klien.js';
 import { ambilTokenTersimpan, simpanToken } from '../composables/usePeserta.js';
 import { useSocket } from '../composables/useSocket.js';
 import KartuVue from '../komponen/papan/Kartu.vue';
 import TombolKembali from '../komponen/umum/TombolKembali.vue';
 import { useAuthStore } from '../stores/auth.js';
-
-/**
- * Lampiran gambar pada kartu SENGAJA belum dibuka untuk peserta anonim di
- * pass ini: endpoint unggah (`/api/unggah/gambar`) saat ini hanya digerbang
- * untuk guru (dipakai editor `pin_jawaban`). Membuka unggah file ke pengguna
- * anonim butuh rate-limit khusus per-token yang belum ada — daripada
- * setengah-aman, kartu untuk sekarang teks-saja; `kartu.lampiranPath` di
- * skema & tipe tetap disiapkan untuk menyusul.
- */
 
 const route = useRoute();
 const kode = String(route.params.kode).toUpperCase();
@@ -31,6 +24,7 @@ const auth = useAuthStore();
 const guruAturId = typeof route.query.atur === 'string' ? route.query.atur : null;
 
 const nama = ref('');
+const token = ref(''); // diisi setelah `masuk()` — dipakai untuk unggah lampiran kartu
 const sudahMasuk = ref(false);
 const menghubungkan = ref(false);
 const galat = ref('');
@@ -40,6 +34,9 @@ const formTerbuka = ref<number | null>(null); // kolomId sedang menulis kartu ba
 const judulBaru = ref('');
 const isiBaru = ref('');
 const warnaBaru = ref('kuning');
+const lampiranBaru = ref(''); // path gambar hasil unggah, kosong = tanpa lampiran
+const mengunggahLampiran = ref(false);
+const galatUnggah = ref('');
 
 // Kelas Tailwind harus berupa string LITERAL agar dipindai compiler saat build —
 // interpolasi seperti `bg-${w}-200` tidak akan pernah menghasilkan CSS apa pun.
@@ -85,6 +82,7 @@ async function masuk(): Promise<void> {
       return;
     }
     simpanToken(`papan_${kode}`, b.data.token);
+    token.value = b.data.token;
     papan.value = b.data.papan;
     kolom.value = b.data.kolom;
 
@@ -100,15 +98,39 @@ function bukaForm(kolomId: number): void {
   judulBaru.value = '';
   isiBaru.value = '';
   warnaBaru.value = 'kuning';
+  lampiranBaru.value = '';
+  galatUnggah.value = '';
+}
+
+async function unggahLampiran(e: Event): Promise<void> {
+  const berkas = (e.target as HTMLInputElement).files?.[0];
+  if (!berkas) return;
+  mengunggahLampiran.value = true;
+  galatUnggah.value = '';
+  try {
+    const r = await apiUnggah.gambarPapan(kode, token.value, berkas);
+    lampiranBaru.value = r.path;
+  } catch (err) {
+    galatUnggah.value = err instanceof GalatApi ? err.message : 'Gagal mengunggah gambar.';
+  } finally {
+    mengunggahLampiran.value = false;
+    (e.target as HTMLInputElement).value = ''; // supaya memilih berkas yang sama lagi tetap memicu @change
+  }
 }
 
 function kirimKartu(): void {
   if (formTerbuka.value === null) return;
-  if (judulBaru.value.trim() === '' && isiBaru.value.trim() === '') return;
+  if (judulBaru.value.trim() === '' && isiBaru.value.trim() === '' && !lampiranBaru.value) return;
 
   socket.emit(
     'papan:kartu_baru',
-    { kolomId: formTerbuka.value, judul: judulBaru.value, isi: isiBaru.value, warna: warnaBaru.value },
+    {
+      kolomId: formTerbuka.value,
+      judul: judulBaru.value,
+      isi: isiBaru.value,
+      warna: warnaBaru.value,
+      lampiranPath: lampiranBaru.value || undefined,
+    },
     (b) => {
       if (b.ok) {
         tempatkanKartu(b.data.kartu);
@@ -313,8 +335,26 @@ onUnmounted(() => {
                   @click="warnaBaru = w.nama"
                 />
               </div>
+
+              <div v-if="lampiranBaru" class="relative inline-block">
+                <img :src="lampiranBaru" class="max-h-32 rounded-lg" />
+                <button
+                  type="button"
+                  class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-slate-700 text-white text-xs leading-none"
+                  title="Hapus gambar"
+                  @click="lampiranBaru = ''"
+                >
+                  ✕
+                </button>
+              </div>
+              <label v-else class="inline-flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer" :class="{ 'opacity-50 pointer-events-none': mengunggahLampiran }">
+                📷 {{ mengunggahLampiran ? 'Mengunggah...' : 'Tambah gambar' }}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" :disabled="mengunggahLampiran" @change="unggahLampiran" />
+              </label>
+              <p v-if="galatUnggah" class="text-xs text-red-600">{{ galatUnggah }}</p>
+
               <div class="flex gap-2">
-                <button type="submit" class="flex-1 rounded-lg bg-blue-600 text-white text-sm py-2.5 active:scale-[0.98] transition-transform">Kirim</button>
+                <button type="submit" :disabled="mengunggahLampiran" class="flex-1 rounded-lg bg-blue-600 text-white text-sm py-2.5 active:scale-[0.98] transition-transform disabled:opacity-50">Kirim</button>
                 <button type="button" class="text-sm text-slate-400 px-2" @click="formTerbuka = null">Batal</button>
               </div>
             </form>

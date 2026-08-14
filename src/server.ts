@@ -6,7 +6,7 @@ import Fastify from 'fastify';
 import { TokoSesiRedis } from './auth/tokoSesiRedis.js';
 import { config } from './config.js';
 import { backupSekarang, bukaDb, mulaiBackupBerkala, tutupDb } from './db/index.js';
-import { seedAdmin } from './db/seed.js';
+import { seedAdmin, seedS3 } from './db/seed.js';
 import { log } from './log.js';
 import { buatIo, type IoServer } from './realtime/index.js';
 import { redisUmum, tutupRedis } from './redis/client.js';
@@ -61,6 +61,7 @@ async function utama(): Promise<void> {
   // 1) Database — dibuka & dimigrasikan lebih dulu karena hampir semua rute bergantung padanya.
   bukaDb();
   seedAdmin();
+  seedS3();
   mulaiBackupBerkala();
 
   // 2) Redis — ditunggu dengan retry supaya urutan `docker compose up` tidak jadi masalah.
@@ -83,7 +84,13 @@ async function utama(): Promise<void> {
         defaultSrc: ["'self'"],
         connectSrc: ["'self'", 'ws:', 'wss:'],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'blob:'],
+        // 'https:' (bukan cuma origin S3 tunggal) karena bucket-nya bisa diganti
+        // admin kapan saja lewat panel (lihat layanan/pengaturan.ts) TANPA restart
+        // server — daftar origin statis di sini akan langsung basi begitu itu
+        // terjadi. Aman diperlonggar sejauh ini: setiap `src` gambar di aplikasi
+        // SELALU nilai yang server sendiri hasilkan (hasil unggah), tidak pernah
+        // URL bebas dari input pengguna, jadi tidak membuka jalur XSS/SSRF baru.
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         // Helmet menyalakan `upgrade-insecure-requests` secara bawaan. Di
         // belakang proxy yang menyajikan http://, direktif itu membuat browser
         // memaksa CSS/JS/favicon diambil lewat https — dan gagal semua dengan

@@ -219,6 +219,32 @@ const daftar: Migrasi[] = [
       INSERT INTO pengaturan (id, nama_aplikasi) VALUES (1, 'Refleksi');
     `,
   },
+  {
+    versi: 4,
+    nama: 'pengaturan-s3',
+    sql: /* sql */ `
+      ------------------------------------------- object storage S3 (gambar unggahan)
+      -- Kosong (NULL) = pakai disk lokal (bawaan). Diisi lewat panel admin atau
+      -- di-seed sekali dari env var S3_* saat boot pertama — lihat db/seed.ts.
+      ALTER TABLE pengaturan ADD COLUMN s3_endpoint TEXT;
+      ALTER TABLE pengaturan ADD COLUMN s3_region TEXT NOT NULL DEFAULT 'us-east-1';
+      ALTER TABLE pengaturan ADD COLUMN s3_bucket TEXT;
+      ALTER TABLE pengaturan ADD COLUMN s3_access_key TEXT;
+      ALTER TABLE pengaturan ADD COLUMN s3_secret_key TEXT;
+    `,
+  },
+  {
+    versi: 5,
+    nama: 'pengaturan-s3-url-publik',
+    sql: /* sql */ `
+      -- Override URL publik — WAJIB diisi untuk penyedia yang endpoint S3-nya
+      -- privat (mis. Cloudflare R2: <account>.r2.cloudflarestorage.com hanya
+      -- bisa diakses dengan kredensial, tidak bisa jadi URL <img> langsung).
+      -- Kosong = turunkan dari endpoint+bucket seperti sebelumnya (cocok untuk
+      -- NevaObjects/MinIO/Ceph RGW dkk yang endpoint-nya memang publik).
+      ALTER TABLE pengaturan ADD COLUMN s3_url_publik TEXT;
+    `,
+  },
 ];
 
 /**

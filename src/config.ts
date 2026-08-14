@@ -11,6 +11,16 @@ import { dirname, resolve } from 'node:path';
  * container dibangun ulang — kalau tidak, semua guru ter-logout tiap kali rebuild.
  */
 
+// Docker Compose mengisi env container langsung (lewat `environment:` di
+// docker-compose.yml), jadi tidak butuh ini. Tapi `npm run dev`/`npm start`
+// tanpa Docker tidak pernah membaca `.env` sama sekali kalau tidak ada baris
+// ini — dibungkus try/catch karena filenya sendiri OPSIONAL (prinsip di atas).
+try {
+  process.loadEnvFile();
+} catch {
+  // .env tidak ada — semua nilai bawaan di bawah tetap berlaku.
+}
+
 function teks(nama: string, bawaan: string): string {
   const v = process.env[nama];
   return v !== undefined && v !== '' ? v : bawaan;
@@ -84,6 +94,27 @@ export const config = {
   dirUnggahan: resolve(dirData, 'unggahan'),
   dirBackup: resolve(dirData, 'backup'),
   dirWeb: resolve(akarProyek, teks('DIR_WEB', './web/dist')),
+
+  /**
+   * Object storage S3-compatible (mis. NevaObjects/Nevacloud) untuk gambar
+   * unggahan. Kosongkan salah satu dari empat nilai di bawah untuk memakai
+   * bawaan: simpan di disk lokal (`dirUnggahan`, disajikan lewat `/unggahan/`)
+   * — sama seperti sebelum fitur ini ada, jadi instalasi lama tidak perlu
+   * ganti apa pun.
+   */
+  s3: {
+    endpoint: teks('S3_ENDPOINT', ''),
+    region: teks('S3_REGION', 'us-east-1'),
+    bucket: teks('S3_BUCKET', ''),
+    accessKey: teks('S3_ACCESS_KEY', ''),
+    secretKey: teks('S3_SECRET_KEY', ''),
+    /** WAJIB diisi untuk Cloudflare R2 (endpoint S3 R2 bersifat privat) —
+     *  lihat `layanan/s3Klien.ts`. Kosong = turunkan dari endpoint+bucket. */
+    urlPublik: teks('S3_URL_PUBLIK', ''),
+    get aktif() {
+      return this.endpoint !== '' && this.bucket !== '' && this.accessKey !== '' && this.secretKey !== '';
+    },
+  },
 
   redisUrl: teks('REDIS_URL', 'redis://127.0.0.1:6379'),
 

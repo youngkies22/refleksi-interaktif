@@ -18,11 +18,21 @@ import { eksporKontenJson, eksporPapanSatu, eksporPresentasiSatu, importKontenJs
 import { backupSekarang, daftarBackup, jalurBackup, pulihkanDariBackup } from '../../db/index.js';
 import { catatLogAdmin, daftarLogAdmin } from '../../layanan/logAdmin.js';
 import { daftarSemuaPapan, detailPapanAdmin } from '../../layanan/papan.js';
-import { ambilPengaturan, ubahLogo, ubahNamaAplikasi } from '../../layanan/pengaturan.js';
+import {
+  ambilKonfigS3,
+  ambilKonfigS3Admin,
+  ambilPengaturan,
+  hapusKonfigS3,
+  ubahKonfigS3,
+  ubahLogo,
+  ubahNamaAplikasi,
+  type DataUbahS3,
+} from '../../layanan/pengaturan.js';
 import { daftarSemuaPresentasi, detailPresentasiAdmin } from '../../layanan/presentasi.js';
+import { ujiKoneksiS3 } from '../../layanan/s3Klien.js';
 import { simpanGambarUnggahan } from '../../layanan/unggah.js';
 import { namaBerkasAman } from '../../util/teks.js';
-import { keGalatKirim, statusDariGalat } from '../../galat.js';
+import { galatValidasi, keGalatKirim, statusDariGalat } from '../../galat.js';
 import { BACKUP_KONTEN } from '../../../shared/konstanta.js';
 
 interface ParamId {
@@ -286,6 +296,89 @@ export async function ruteAdmin(app: FastifyInstance): Promise<void> {
       const pengaturan = ubahLogo(null);
       catatLogAdmin(adminId, cariGuruById(adminId)?.nama ?? `#${adminId}`, 'ubah_pengaturan', 'aplikasi', null, 'Logo aplikasi dihapus');
       return { pengaturan };
+    } catch (e) {
+      balas.status(statusDariGalat(e));
+      return { galat: keGalatKirim(e) };
+    }
+  });
+
+  /**
+   * Object storage S3 (gambar unggahan) — lihat `layanan/pengaturan.ts` untuk
+   * kenapa disimpan di DB (bukan cuma `.env`): supaya bisa diubah lewat panel
+   * ini tanpa akses server. Secret key TIDAK PERNAH ikut di respons GET/PATCH,
+   * hanya penanda `secretKeyDiatur`.
+   */
+  app.get('/api/admin/pengaturan/s3', async (req, balas) => {
+    try {
+      adminIdWajib(req);
+      return { pengaturan: ambilKonfigS3Admin() };
+    } catch (e) {
+      balas.status(statusDariGalat(e));
+      return { galat: keGalatKirim(e) };
+    }
+  });
+
+  app.patch<{ Body: DataUbahS3 }>('/api/admin/pengaturan/s3', async (req, balas) => {
+    try {
+      const adminId = adminIdWajib(req);
+      const pengaturan = ubahKonfigS3(req.body ?? {});
+      catatLogAdmin(
+        adminId,
+        cariGuruById(adminId)?.nama ?? `#${adminId}`,
+        'ubah_pengaturan_s3',
+        'aplikasi',
+        null,
+        `Konfigurasi S3 diperbarui (endpoint: ${pengaturan.endpoint || '-'}, bucket: ${pengaturan.bucket || '-'})`,
+      );
+      return { pengaturan };
+    } catch (e) {
+      balas.status(statusDariGalat(e));
+      return { galat: keGalatKirim(e) };
+    }
+  });
+
+  app.delete('/api/admin/pengaturan/s3', async (req, balas) => {
+    try {
+      const adminId = adminIdWajib(req);
+      const pengaturan = hapusKonfigS3();
+      catatLogAdmin(
+        adminId,
+        cariGuruById(adminId)?.nama ?? `#${adminId}`,
+        'ubah_pengaturan_s3',
+        'aplikasi',
+        null,
+        'Konfigurasi S3 dihapus — gambar baru kembali disimpan di disk lokal',
+      );
+      return { pengaturan };
+    } catch (e) {
+      balas.status(statusDariGalat(e));
+      return { galat: keGalatKirim(e) };
+    }
+  });
+
+  // Unggah+baca+hapus berkas kecil sungguhan — supaya salah ketik access
+  // key/secret/bucket ketahuan SAAT diisi admin, bukan nanti saat guru/siswa
+  // pertama kali mencoba unggah gambar. Nilai yang belum diisi di body dipakai
+  // dari yang SUDAH TERSIMPAN, supaya admin bisa menguji tanpa mengetik ulang
+  // secret key yang tidak berubah.
+  app.post<{ Body: DataUbahS3 }>('/api/admin/pengaturan/s3/uji', async (req, balas) => {
+    try {
+      adminIdWajib(req);
+      const tersimpan = ambilKonfigS3();
+      const b = req.body ?? {};
+      const k = {
+        endpoint: b.endpoint?.trim() || tersimpan.endpoint,
+        region: b.region?.trim() || tersimpan.region,
+        bucket: b.bucket?.trim() || tersimpan.bucket,
+        accessKey: b.accessKey?.trim() || tersimpan.accessKey,
+        secretKey: b.secretKey || tersimpan.secretKey,
+        urlPublik: (b.urlPublik !== undefined ? b.urlPublik.trim() : tersimpan.urlPublik) || '',
+      };
+      if (!k.endpoint || !k.bucket || !k.accessKey || !k.secretKey) {
+        throw galatValidasi('Lengkapi endpoint, bucket, access key, dan secret key dulu.');
+      }
+      await ujiKoneksiS3(k);
+      return { ok: true };
     } catch (e) {
       balas.status(statusDariGalat(e));
       return { galat: keGalatKirim(e) };
