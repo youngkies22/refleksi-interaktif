@@ -160,6 +160,7 @@ export async function daftarGambarUnggahan(
 ): Promise<{ gambar: InfoGambar[]; total: number; pemakaian: { byte: number; mb: number } }> {
   const daftar: InfoGambar[] = [];
   let pemakaianByte = 0;
+  let total = 0;
 
   const s3 = ambilKonfigS3();
 
@@ -209,6 +210,7 @@ export async function daftarGambarUnggahan(
 
       // Total pemakaian
       pemakaianByte = semua.reduce((sum, o) => sum + o.Size, 0);
+      total = semua.length;
     } catch (e) {
       // Silent fail kalau S3 tidak accessible
     }
@@ -232,6 +234,7 @@ export async function daftarGambarUnggahan(
 
       // Sort by mtime (newest first) & apply pagination
       infoFiles.sort((a, b) => Number(b.stat.mtimeMs) - Number(a.stat.mtimeMs));
+      total = infoFiles.length;
       const halaman = infoFiles.slice(offset, offset + limit);
 
       for (const info of halaman) {
@@ -250,7 +253,7 @@ export async function daftarGambarUnggahan(
 
   return {
     gambar: daftar,
-    total: daftar.length > 0 ? (s3.aktif ? 999 : 999) : 0, // Simplified count
+    total,
     pemakaian: {
       byte: pemakaianByte,
       mb: Math.round((pemakaianByte / 1024 / 1024) * 100) / 100,

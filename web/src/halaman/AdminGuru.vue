@@ -368,11 +368,13 @@ async function ujiS3(): Promise<void> {
 
 const daftarGambar = ref<Array<{ nama: string; path: string; ukuranByte: number; tanggal: string; tipe: 'lokal' | 's3' }>>([]);
 const pemakaianGambar = ref({ byte: 0, mb: 0 });
-const memautGambar = ref(true);
+const memautGambar = ref(false);
 const gatatGambar = ref('');
+const sudahMuatGambar = ref(false);
 
 async function muatDaftarGambar(): Promise<void> {
   memautGambar.value = true;
+  sudahMuatGambar.value = true;
   gatatGambar.value = '';
   try {
     const r = await apiUnggah.daftarGambar(100, 0);
@@ -406,10 +408,10 @@ const tabs = computed(() => [
   { key: 'log' as const, label: '📜 Log Aktivitas' },
 ]);
 
-// Auto-muat daftar gambar saat switch ke tab gambar
-watch(() => tabAktif.value, (tab) => {
-  if (tab === 'gambar' && daftarGambar.value.length === 0 && !memautGambar.value) {
-    muatDaftarGambar();
+// Auto-muat daftar gambar saat pertama kali membuka tab gambar
+watch(tabAktif, (tab) => {
+  if (tab === 'gambar' && !sudahMuatGambar.value) {
+    void muatDaftarGambar();
   }
 });
 
