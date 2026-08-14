@@ -46,4 +46,21 @@ export const apiUnggah = {
       throw new GalatApi(badan?.galat ?? { kode: 'GALAT_SERVER', pesan: 'Gagal menghapus gambar.' });
     }
   },
+
+  /** Daftar gambar yang diunggah (dari S3 atau disk) dengan pagination */
+  async daftarGambar(limit: number = 50, offset: number = 0): Promise<{
+    gambar: Array<{ nama: string; path: string; ukuranByte: number; tanggal: string; tipe: 'lokal' | 's3' }>;
+    total: number;
+    pemakaian: { byte: number; mb: number };
+  }> {
+    const r = await fetch(`/api/unggah/daftar?limit=${limit}&offset=${offset}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    const badan = await r.json().catch(() => null);
+    if (!r.ok) {
+      throw new GalatApi(badan?.galat ?? { kode: 'GALAT_SERVER', pesan: 'Gagal memuat daftar gambar.' });
+    }
+    return badan;
+  },
 };

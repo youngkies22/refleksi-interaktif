@@ -9,6 +9,7 @@ import {
   type HasilImporKonten,
   type InfoBackupSnapshot,
 } from '../api/admin.js';
+import { apiUnggah } from '../api/unggah.js';
 import { GalatApi } from '../api/klien.js';
 import TombolKembali from '../komponen/umum/TombolKembali.vue';
 import { useAuthStore } from '../stores/auth.js';
@@ -363,13 +364,45 @@ async function ujiS3(): Promise<void> {
   }
 }
 
+/* ────────────────── Manajemen Gambar ────────────────── */
+
+const daftarGambar = ref<Array<{ nama: string; path: string; ukuranByte: number; tanggal: string; tipe: 'lokal' | 's3' }>>([]);
+const pemakaianGambar = ref({ byte: 0, mb: 0 });
+const memautGambar = ref(true);
+const gatatGambar = ref('');
+
+async function muatDaftarGambar(): Promise<void> {
+  memautGambar.value = true;
+  gatatGambar.value = '';
+  try {
+    const r = await apiUnggah.daftarGambar(100, 0);
+    daftarGambar.value = r.gambar;
+    pemakaianGambar.value = r.pemakaian;
+  } catch (e) {
+    gatatGambar.value = e instanceof GalatApi ? e.message : 'Gagal memuat daftar gambar.';
+  } finally {
+    memautGambar.value = false;
+  }
+}
+
+async function hapusGambarAdmin(path: string, nama: string): Promise<void> {
+  if (!confirm(`Hapus gambar "${nama}"?`)) return;
+  try {
+    await apiUnggah.hapusGambar(path);
+    await muatDaftarGambar();
+  } catch (e) {
+    gatatGambar.value = e instanceof GalatApi ? e.message : 'Gagal menghapus gambar.';
+  }
+}
+
 /* ────────────────── Tab aktif ────────────────── */
 
-const tabAktif = ref<'akun' | 'impor' | 'log'>('akun');
+const tabAktif = ref<'akun' | 'impor' | 'log' | 'gambar'>('akun');
 
 const tabs = computed(() => [
   { key: 'akun' as const, label: `👤 Akun Guru (${daftar.value.length})` },
   { key: 'impor' as const, label: '📥 Import Akun & Backup' },
+  { key: 'gambar' as const, label: '🖼️ Manajemen Gambar' },
   { key: 'log' as const, label: '📜 Log Aktivitas' },
 ]);
 
@@ -888,6 +921,87 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
                 >
                   {{ memulihkanNama === s.nama ? 'Memulihkan...' : '♻ Pulihkan' }}
                 </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- Tab: Manajemen Gambar -->
+      <div v-if="tabAktif === 'gambar'" class="space-y-6">
+        <section class="bg-white rounded-2xl border border-slate-200 p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-700">🖼️ Manajemen Gambar</h2>
+              <p class="text-xs text-slate-400 mt-1">Kelola semua gambar yang diunggah di slide & kartu papan</p>
+            </div>
+            <button
+              type="button"
+              @click="muatDaftarGambar"
+              :disabled="memautGambar"
+              class="text-sm text-blue-600 hover:text-blue-700 font-medium px-4 py-2 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {{ memautGambar ? '⏳ Memuat...' : '🔄 Muat Ulang' }}
+            </button>
+          </div>
+
+          <!-- Storage info -->
+          <div class="grid sm:grid-cols-3 gap-3 mb-6">
+            <div class="bg-blue-50 rounded-xl p-3 border border-blue-200">
+              <p class="text-xs text-blue-600 font-medium">Total Gambar</p>
+              <p class="text-2xl font-bold text-blue-700 mt-1">{{ daftarGambar.length }}</p>
+            </div>
+            <div class="bg-violet-50 rounded-xl p-3 border border-violet-200">
+              <p class="text-xs text-violet-600 font-medium">Pemakaian Storage</p>
+              <p class="text-2xl font-bold text-violet-700 mt-1">{{ pemakaianGambar.mb }} MB</p>
+            </div>
+            <div class="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
+              <p class="text-xs text-emerald-600 font-medium">Rata-rata Ukuran</p>
+              <p class="text-2xl font-bold text-emerald-700 mt-1">
+                {{ daftarGambar.length > 0 ? Math.round(pemakaianGambar.byte / daftarGambar.length / 1024) : 0 }} KB
+              </p>
+            </div>
+          </div>
+
+          <!-- Error -->
+          <p v-if="gatatGambar" class="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{{ gatatGambar }}</p>
+
+          <!-- Loading state -->
+          <div v-if="memautGambar" class="text-center py-12">
+            <p class="text-slate-400">Memuat daftar gambar...</p>
+          </div>
+
+          <!-- Empty state -->
+          <div v-else-if="daftarGambar.length === 0" class="text-center py-12">
+            <p class="text-3xl mb-2">📭</p>
+            <p class="text-slate-400">Belum ada gambar yang diunggah</p>
+          </div>
+
+          <!-- Gallery grid -->
+          <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div v-for="(gambar, i) in daftarGambar" :key="i" class="group relative rounded-xl overflow-hidden bg-slate-100">
+              <!-- Image preview -->
+              <img :src="gambar.path" :alt="gambar.nama" class="w-full h-40 object-cover" />
+
+              <!-- Overlay -->
+              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-colors flex flex-col items-center justify-center opacity-0 group-hover:opacity-100">
+                <button
+                  type="button"
+                  @click="hapusGambarAdmin(gambar.path, gambar.nama)"
+                  class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  🗑️ Hapus
+                </button>
+              </div>
+
+              <!-- Info -->
+              <div class="p-2 space-y-1">
+                <p class="text-xs font-medium text-slate-700 truncate" :title="gambar.nama">{{ gambar.nama }}</p>
+                <div class="flex items-center justify-between text-xs text-slate-500">
+                  <span>{{ (gambar.ukuranByte / 1024).toFixed(0) }} KB</span>
+                  <span class="text-blue-600 font-medium">{{ gambar.tipe === 's3' ? 'S3' : 'Disk' }}</span>
+                </div>
+                <p class="text-[10px] text-slate-400">{{ new Date(gambar.tanggal).toLocaleDateString('id-ID') }}</p>
               </div>
             </div>
           </div>

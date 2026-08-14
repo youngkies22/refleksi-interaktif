@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { unlink, writeFile } from 'node:fs/promises';
+import { readdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import type { ListObjectsV2CommandOutput } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
 import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
 import { config } from '../config.js';
@@ -139,4 +140,120 @@ export async function hapusGambarUnggahan(path: string): Promise<void> {
   await s3Klien(s3)
     .send(new DeleteObjectCommand({ Bucket: s3.bucket, Key: key }))
     .catch(() => {}); // silent fail
+}
+
+interface InfoGambar {
+  nama: string;
+  path: string;
+  ukuranByte: number;
+  tanggal: string;
+  tipe: 'lokal' | 's3';
+}
+
+/**
+ * List semua gambar yang diunggah (dari S3 atau disk).
+ * Dengan pagination, size info, dan total storage usage.
+ */
+export async function daftarGambarUnggahan(
+  limit: number = 50,
+  offset: number = 0,
+): Promise<{ gambar: InfoGambar[]; total: number; pemakaian: { byte: number; mb: number } }> {
+  const daftar: InfoGambar[] = [];
+  let pemakaianByte = 0;
+
+  const s3 = ambilKonfigS3();
+
+  if (s3.aktif) {
+    // List dari S3
+    try {
+      const klien = s3Klien(s3);
+      let continueToken: string | undefined = undefined;
+      let semua: Array<{ Key: string; Size: number; LastModified: Date }> = [];
+
+      // Pagination di S3 (max 1000 per request)
+      do {
+        const resp: ListObjectsV2CommandOutput = await klien.send(
+          new ListObjectsV2Command({
+            Bucket: s3.bucket,
+            ContinuationToken: continueToken,
+            MaxKeys: 1000,
+          }),
+        );
+
+        if (resp.Contents) {
+          semua = semua.concat(
+            resp.Contents.map((o: any) => ({
+              Key: o.Key || '',
+              Size: Number(o.Size || 0),
+              LastModified: o.LastModified || new Date(),
+            })),
+          );
+        }
+
+        continueToken = resp.NextContinuationToken;
+      } while (continueToken);
+
+      // Sort by date (newest first) & apply pagination
+      semua.sort((a, b) => b.LastModified.getTime() - a.LastModified.getTime());
+      const halaman = semua.slice(offset, offset + limit);
+
+      for (const obj of halaman) {
+        daftar.push({
+          nama: obj.Key.split('/').pop() || obj.Key,
+          path: urlPublikS3(s3, obj.Key),
+          ukuranByte: obj.Size,
+          tanggal: obj.LastModified.toISOString(),
+          tipe: 's3',
+        });
+      }
+
+      // Total pemakaian
+      pemakaianByte = semua.reduce((sum, o) => sum + o.Size, 0);
+    } catch (e) {
+      // Silent fail kalau S3 tidak accessible
+    }
+  } else {
+    // List dari disk lokal
+    try {
+      const files = await readdir(config.dirUnggahan);
+      const infoFiles: Array<{ nama: string; stat: Awaited<ReturnType<typeof stat>> }> = [];
+
+      for (const file of files) {
+        try {
+          const st = await stat(resolve(config.dirUnggahan, file));
+          if (st.isFile()) {
+            infoFiles.push({ nama: file, stat: st });
+            pemakaianByte += st.size;
+          }
+        } catch {
+          // Skip file yang error
+        }
+      }
+
+      // Sort by mtime (newest first) & apply pagination
+      infoFiles.sort((a, b) => Number(b.stat.mtimeMs) - Number(a.stat.mtimeMs));
+      const halaman = infoFiles.slice(offset, offset + limit);
+
+      for (const info of halaman) {
+        daftar.push({
+          nama: info.nama,
+          path: `/unggahan/${info.nama}`,
+          ukuranByte: Number(info.stat.size),
+          tanggal: info.stat.mtime.toISOString(),
+          tipe: 'lokal',
+        });
+      }
+    } catch (e) {
+      // Dir tidak ada atau error, abaikan
+    }
+  }
+
+  return {
+    gambar: daftar,
+    total: daftar.length > 0 ? (s3.aktif ? 999 : 999) : 0, // Simplified count
+    pemakaian: {
+      byte: pemakaianByte,
+      mb: Math.round((pemakaianByte / 1024 / 1024) * 100) / 100,
+    },
+  };
 }
