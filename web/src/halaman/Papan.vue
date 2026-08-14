@@ -136,12 +136,23 @@ async function prosesUnggahLampiran(berkas: File): Promise<void> {
   galatUnggah.value = '';
   try {
     const r = await apiUnggah.gambarPapan(kode, token.value, berkas);
+    // Hapus gambar lama kalau ada
+    if (lampiranBaru.value) {
+      await apiUnggah.hapusGambar(lampiranBaru.value).catch(() => {});
+    }
     lampiranBaru.value = r.path;
   } catch (err) {
     galatUnggah.value = err instanceof GalatApi ? err.message : 'Gagal mengunggah gambar.';
   } finally {
     mengunggahLampiran.value = false;
   }
+}
+
+async function hapusLampiranBaru(): Promise<void> {
+  if (!lampiranBaru.value) return;
+  // Hapus dari S3/disk secara silent
+  await apiUnggah.hapusGambar(lampiranBaru.value).catch(() => {});
+  lampiranBaru.value = '';
 }
 
 function kirimKartu(): void {
@@ -371,7 +382,7 @@ onUnmounted(() => {
                     type="button"
                     class="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white text-sm leading-none shadow-md transition-colors"
                     title="Hapus gambar"
-                    @click="lampiranBaru = ''"
+                    @click="hapusLampiranBaru"
                   >
                     ✕
                   </button>
@@ -379,7 +390,7 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="text-xs text-slate-500 hover:text-blue-600 transition-colors"
-                  @click="lampiranBaru = ''"
+                  @click="hapusLampiranBaru"
                 >
                   🔄 Ganti gambar
                 </button>

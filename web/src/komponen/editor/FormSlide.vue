@@ -143,6 +143,13 @@ async function prosesUnggahGambarPertanyaan(berkas: File): Promise<void> {
   }
 }
 
+async function hapusGambarPertanyaan(): Promise<void> {
+  if (!konfigGambarPertanyaan.value) return;
+  // Hapus dari S3/disk secara silent (jangan tampil error ke user)
+  await apiUnggah.hapusGambar(konfigGambarPertanyaan.value).catch(() => {});
+  konfigGambarPertanyaan.value = '';
+}
+
 watch(() => props.slide.id, () => muatDariSlide(props.slide), { immediate: true });
 
 function tambahOpsi(): void {
@@ -225,7 +232,7 @@ function simpan(): void {
               type="button"
               class="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white text-sm leading-none shadow-md transition-colors"
               title="Hapus gambar"
-              @click="konfigGambarPertanyaan = ''"
+              @click="hapusGambarPertanyaan"
             >
               ✕
             </button>
@@ -233,7 +240,7 @@ function simpan(): void {
           <button
             type="button"
             class="text-xs text-slate-500 hover:text-blue-600 transition-colors"
-            @click="konfigGambarPertanyaan = ''"
+            @click="hapusGambarPertanyaan"
           >
             🔄 Ganti gambar
           </button>

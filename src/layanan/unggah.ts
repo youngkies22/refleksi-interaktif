@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { writeFile } from 'node:fs/promises';
+import { unlink, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
 import { config } from '../config.js';
@@ -83,4 +83,60 @@ export async function simpanGambarUnggahan(buffer: Buffer): Promise<{ path: stri
 
   await writeFile(resolve(config.dirUnggahan, namaBerkas), dikompres.buffer);
   return { path: `/unggahan/${namaBerkas}` };
+}
+
+/**
+ * Hapus gambar yang diunggah dari S3 atau disk lokal. Path bisa berupa:
+ * - URL S3: `https://s3.nevaobjects.id/bucket/uuid.webp` atau custom domain
+ * - Path lokal: `/unggahan/uuid.webp`
+ *
+ * Fungsi auto-detect sumber dan hapus dari tempat yang sesuai. Error dihapus
+ * silent (tidak throw) supaya UI tetap responsif — if-file-not-found adalah
+ * normal (sudah dihapus sebelumnya atau never-existed).
+ */
+export async function hapusGambarUnggahan(path: string): Promise<void> {
+  if (!path) return;
+
+  // Deteksi: path lokal atau S3
+  if (path.startsWith('/unggahan/')) {
+    // Path lokal: ekstrak nama file
+    const namaBerkas = path.substring('/unggahan/'.length);
+    const fullPath = resolve(config.dirUnggahan, namaBerkas);
+    await unlink(fullPath).catch(() => {}); // silent fail kalau file tidak ada
+    return;
+  }
+
+  // S3: parse path/URL untuk ekstrak bucket key
+  // Bisa berupa: https://s3.nevaobjects.id/bucket/key atau https://custom.domain/key
+  // atau: https://account.r2.cloudflarestorage.com/bucket/key (R2)
+  const s3 = ambilKonfigS3();
+  if (!s3.aktif) return; // kalau S3 tidak aktif, abaikan
+
+  // Ekstrak key dari path:
+  // - Jika URL punya bucket di pathname: https://endpoint/bucket/key → key
+  // - Jika custom domain (r2.dev atau custom): key adalah pathname minus leading /
+  let key = '';
+
+  try {
+    const url = new URL(path);
+    const parts = url.pathname.split('/').filter((p) => p !== '');
+
+    if (parts.length >= 2) {
+      // Format: /bucket/key/.. → anggap bucket adalah parts[0]
+      key = parts.slice(1).join('/');
+    } else if (parts.length === 1) {
+      // Format: /key → langsung jadi key (custom domain)
+      key = parts[0] || '';
+    }
+  } catch {
+    // Bukan URL valid, abaikan
+    return;
+  }
+
+  if (!key) return;
+
+  // Delete dari S3
+  await s3Klien(s3)
+    .send(new DeleteObjectCommand({ Bucket: s3.bucket, Key: key }))
+    .catch(() => {}); // silent fail
 }

@@ -30,4 +30,20 @@ export const apiUnggah = {
     }
     return badan as { path: string };
   },
+
+  /** Hapus gambar — dipanggil saat gambar dihapus dari slide atau kartu.
+   *  Path bisa berupa URL dari S3 atau path lokal (/unggahan/...).
+   *  Server akan auto-detect dan hapus dari S3 atau disk sesuai kebutuhan. */
+  async hapusGambar(path: string): Promise<void> {
+    const r = await fetch('/api/unggah/gambar', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+      credentials: 'include',
+    });
+    if (!r.ok) {
+      const badan = await r.json().catch(() => null);
+      throw new GalatApi(badan?.galat ?? { kode: 'GALAT_SERVER', pesan: 'Gagal menghapus gambar.' });
+    }
+  },
 };
