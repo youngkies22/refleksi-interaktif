@@ -59,6 +59,32 @@ function muatDariSlide(s: Slide): void {
 async function unggahGambar(e: Event): Promise<void> {
   const berkas = (e.target as HTMLInputElement).files?.[0];
   if (!berkas) return;
+  await prosesUnggahGambar(berkas);
+}
+
+function onDropGambar(e: DragEvent): void {
+  e.preventDefault();
+  const el = e.currentTarget as HTMLElement;
+  el.classList.remove('border-blue-400', 'bg-blue-50');
+  const berkas = e.dataTransfer?.files?.[0];
+  if (berkas) prosesUnggahGambar(berkas);
+}
+
+async function prosesUnggahGambar(berkas: File): Promise<void> {
+  // Validasi tipe file
+  const tipeYangDiizinkan = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  if (!tipeYangDiizinkan.includes(berkas.type)) {
+    galatUnggah.value = 'Tipe file tidak didukung. Gunakan PNG, JPEG, WebP, atau GIF.';
+    return;
+  }
+
+  // Validasi ukuran (max 10 MB)
+  const MAX_SIZE = 10 * 1024 * 1024;
+  if (berkas.size > MAX_SIZE) {
+    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 10 MB, file ini ${(berkas.size / 1024 / 1024).toFixed(1)} MB.`;
+    return;
+  }
+
   mengunggah.value = true;
   galatUnggah.value = '';
   try {
@@ -197,17 +223,61 @@ function simpan(): void {
     </div>
 
     <!-- Pin di gambar -->
-    <div v-if="slide.tipe === 'pin_jawaban'" class="space-y-3">
-      <div v-if="!konfigGambarPath">
-        <label class="block text-sm font-medium text-slate-600 mb-1">Unggah gambar</label>
-        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" :disabled="mengunggah" @change="unggahGambar" />
-        <p v-if="mengunggah" class="text-xs text-slate-400 mt-1">Mengunggah...</p>
-        <p v-if="galatUnggah" class="text-xs text-red-600 mt-1">{{ galatUnggah }}</p>
+    <div v-if="slide.tipe === 'pin_jawaban'" class="space-y-4">
+      <div v-if="!konfigGambarPath" class="space-y-3">
+        <label class="block text-sm font-medium text-slate-700 mb-2">📸 Unggah Gambar Pertanyaan</label>
+        <div
+          class="relative border-2 border-dashed border-slate-300 rounded-2xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+          @click="($refs.inputGambar as any)?.click?.()"
+          @dragover.prevent="(e) => (e.currentTarget as HTMLElement).classList.add('border-blue-400', 'bg-blue-50')"
+          @dragleave.prevent="(e) => (e.currentTarget as HTMLElement).classList.remove('border-blue-400', 'bg-blue-50')"
+          @drop="onDropGambar"
+        >
+          <input
+            ref="inputGambar"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            :disabled="mengunggah"
+            class="hidden"
+            @change="unggahGambar"
+          />
+          <div v-if="!mengunggah" class="space-y-2">
+            <p class="text-3xl">🖼️</p>
+            <p class="text-sm font-medium text-slate-700">Klik atau tarik gambar ke sini</p>
+            <p class="text-xs text-slate-500">PNG, JPEG, WebP, atau GIF (Max 10 MB)</p>
+          </div>
+          <div v-else class="space-y-2">
+            <p class="text-2xl">⏳</p>
+            <p class="text-sm font-medium text-slate-600">Mengunggah gambar...</p>
+          </div>
+        </div>
+        <p v-if="galatUnggah" class="text-sm text-red-600 bg-red-50 rounded-lg p-3 flex items-start gap-2">
+          <span>⚠️</span>
+          <span>{{ galatUnggah }}</span>
+        </p>
       </div>
       <template v-else>
-        <EditorAreaGambar :gambar-path="konfigGambarPath" :area="konfigAreaBenar" @ubah="(a) => (konfigAreaBenar = a)" />
-        <button type="button" class="text-xs text-slate-400 hover:text-red-500" @click="konfigGambarPath = ''">Ganti gambar</button>
-        <p v-if="!konfigAreaBenar" class="text-xs text-amber-600">Belum ada area jawaban benar ditandai.</p>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-sm font-medium text-slate-700">✅ Gambar Sudah Diunggah</label>
+            <button
+              type="button"
+              class="text-xs font-medium text-slate-500 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+              @click="konfigGambarPath = ''"
+            >
+              🔄 Ganti Gambar
+            </button>
+          </div>
+          <EditorAreaGambar :gambar-path="konfigGambarPath" :area="konfigAreaBenar" @ubah="(a) => (konfigAreaBenar = a)" />
+          <p v-if="!konfigAreaBenar" class="text-sm text-amber-600 bg-amber-50 rounded-lg p-3 flex items-start gap-2">
+            <span>⚠️</span>
+            <span>Klik & tarik pada gambar untuk menandai area jawaban yang benar</span>
+          </p>
+          <div v-else class="text-sm text-emerald-600 bg-emerald-50 rounded-lg p-3 flex items-start gap-2">
+            <span>✓</span>
+            <span>Area jawaban sudah ditandai</span>
+          </div>
+        </div>
       </template>
     </div>
 

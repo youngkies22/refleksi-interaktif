@@ -105,6 +105,33 @@ function bukaForm(kolomId: number): void {
 async function unggahLampiran(e: Event): Promise<void> {
   const berkas = (e.target as HTMLInputElement).files?.[0];
   if (!berkas) return;
+  await prosesUnggahLampiran(berkas);
+  (e.target as HTMLInputElement).value = '';
+}
+
+function onDropLampiran(e: DragEvent): void {
+  e.preventDefault();
+  const el = e.currentTarget as HTMLElement;
+  el.classList.remove('border-blue-400', 'bg-blue-50');
+  const berkas = e.dataTransfer?.files?.[0];
+  if (berkas) prosesUnggahLampiran(berkas);
+}
+
+async function prosesUnggahLampiran(berkas: File): Promise<void> {
+  // Validasi tipe file
+  const tipeYangDiizinkan = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+  if (!tipeYangDiizinkan.includes(berkas.type)) {
+    galatUnggah.value = 'Tipe file tidak didukung. Gunakan PNG, JPEG, WebP, atau GIF.';
+    return;
+  }
+
+  // Validasi ukuran (max 10 MB)
+  const MAX_SIZE = 10 * 1024 * 1024;
+  if (berkas.size > MAX_SIZE) {
+    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 10 MB.`;
+    return;
+  }
+
   mengunggahLampiran.value = true;
   galatUnggah.value = '';
   try {
@@ -114,7 +141,6 @@ async function unggahLampiran(e: Event): Promise<void> {
     galatUnggah.value = err instanceof GalatApi ? err.message : 'Gagal mengunggah gambar.';
   } finally {
     mengunggahLampiran.value = false;
-    (e.target as HTMLInputElement).value = ''; // supaya memilih berkas yang sama lagi tetap memicu @change
   }
 }
 
@@ -336,22 +362,63 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div v-if="lampiranBaru" class="relative inline-block">
-                <img :src="lampiranBaru" class="max-h-32 rounded-lg" />
+              <!-- Preview gambar yang sudah diunggah -->
+              <div v-if="lampiranBaru" class="space-y-2">
+                <p class="text-xs font-medium text-slate-600">📸 Gambar Lampiran</p>
+                <div class="relative inline-block group">
+                  <img :src="lampiranBaru" class="max-h-40 max-w-full rounded-lg border-2 border-blue-300 bg-blue-50" />
+                  <button
+                    type="button"
+                    class="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white text-sm leading-none shadow-md transition-colors"
+                    title="Hapus gambar"
+                    @click="lampiranBaru = ''"
+                  >
+                    ✕
+                  </button>
+                </div>
                 <button
                   type="button"
-                  class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-slate-700 text-white text-xs leading-none"
-                  title="Hapus gambar"
+                  class="text-xs text-slate-500 hover:text-blue-600 transition-colors"
                   @click="lampiranBaru = ''"
                 >
-                  ✕
+                  🔄 Ganti gambar
                 </button>
               </div>
-              <label v-else class="inline-flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer" :class="{ 'opacity-50 pointer-events-none': mengunggahLampiran }">
-                📷 {{ mengunggahLampiran ? 'Mengunggah...' : 'Tambah gambar' }}
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" :disabled="mengunggahLampiran" @change="unggahLampiran" />
-              </label>
-              <p v-if="galatUnggah" class="text-xs text-red-600">{{ galatUnggah }}</p>
+
+              <!-- Upload area -->
+              <div v-else class="space-y-2">
+                <div
+                  class="relative border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                  @click="($refs.inputLampiran as any)?.click?.()"
+                  @dragover.prevent="(e) => (e.currentTarget as HTMLElement).classList.add('border-blue-400', 'bg-blue-50')"
+                  @dragleave.prevent="(e) => (e.currentTarget as HTMLElement).classList.remove('border-blue-400', 'bg-blue-50')"
+                  @drop="onDropLampiran"
+                >
+                  <input
+                    ref="inputLampiran"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    class="hidden"
+                    :disabled="mengunggahLampiran"
+                    @change="unggahLampiran"
+                  />
+                  <div v-if="!mengunggahLampiran" class="space-y-1">
+                    <p class="text-2xl">📷</p>
+                    <p class="text-sm font-medium text-slate-700">Klik atau tarik gambar di sini</p>
+                    <p class="text-xs text-slate-500">PNG, JPEG, WebP, GIF (Max 10 MB)</p>
+                  </div>
+                  <div v-else class="space-y-1">
+                    <p class="text-2xl">⏳</p>
+                    <p class="text-sm font-medium text-slate-600">Mengunggah gambar...</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Error message -->
+              <p v-if="galatUnggah" class="text-xs text-red-600 bg-red-50 rounded-lg p-2 flex items-start gap-2">
+                <span>⚠️</span>
+                <span>{{ galatUnggah }}</span>
+              </p>
 
               <div class="flex gap-2">
                 <button type="submit" :disabled="mengunggahLampiran" class="flex-1 rounded-lg bg-blue-600 text-white text-sm py-2.5 active:scale-[0.98] transition-transform disabled:opacity-50">Kirim</button>
