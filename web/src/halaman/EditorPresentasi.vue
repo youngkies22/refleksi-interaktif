@@ -59,10 +59,16 @@ async function muat(): Promise<void> {
 
 onMounted(muat);
 
-async function tambahSlide(tipe: TipeSlide): Promise<void> {
+async function tambahSlide(tipe: TipeSlide, gambarPath?: string): Promise<void> {
   tampilkanPemilih.value = false;
   try {
     const r = await apiPresentasi.tambahSlide(presentasiId, tipe);
+
+    // Jika pin_jawaban dengan gambar, langsung set gambar pada slide
+    if (tipe === 'pin_jawaban' && gambarPath) {
+      await apiPresentasi.ubahSlide(r.id, { konfig: { gambar_path: gambarPath } });
+    }
+
     await muat();
     slideDipilihId.value = r.id;
   } catch (e) {
@@ -185,6 +191,6 @@ async function simpanSlide(payload: UbahSlideInput): Promise<void> {
       </section>
     </main>
 
-    <PemilihTipeSlide v-if="tampilkanPemilih" @pilih="tambahSlide" @tutup="tampilkanPemilih = false" />
+    <PemilihTipeSlide v-if="tampilkanPemilih" @pilih="(tipe, gambar) => tambahSlide(tipe, gambar)" @tutup="tampilkanPemilih = false" />
   </div>
 </template>
