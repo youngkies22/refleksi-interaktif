@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { GuruAdmin, LogAdminEntri } from '@bersama/tipe';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   apiAdmin,
@@ -405,6 +405,13 @@ const tabs = computed(() => [
   { key: 'gambar' as const, label: '🖼️ Manajemen Gambar' },
   { key: 'log' as const, label: '📜 Log Aktivitas' },
 ]);
+
+// Auto-muat daftar gambar saat switch ke tab gambar
+watch(() => tabAktif.value, (tab) => {
+  if (tab === 'gambar' && daftarGambar.value.length === 0 && !memautGambar.value) {
+    muatDaftarGambar();
+  }
+});
 
 function mulaiEdit(g: GuruAdmin): void {
   editId.value = g.id;
