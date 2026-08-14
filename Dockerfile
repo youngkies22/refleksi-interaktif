@@ -9,7 +9,7 @@
 # kalau suatu saat tidak ada prebuilt binary yang cocok untuk arsitektur target.
 
 ##################################### 1) Build Vue #####################################
-FROM ghcr.io/nodejs/node:22-alpine AS web-build
+FROM public.ecr.aws/docker/library/node:22-alpine AS web-build
 WORKDIR /app
 
 COPY web/package.json web/package-lock.json ./web/
@@ -20,7 +20,7 @@ COPY web ./web
 RUN cd web && npm run build
 
 ################################## 2) Build server TS ##################################
-FROM ghcr.io/nodejs/node:22-alpine AS server-build
+FROM public.ecr.aws/docker/library/node:22-alpine AS server-build
 WORKDIR /app
 
 RUN apk add --no-cache python3 make g++
@@ -38,7 +38,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 ####################################### 3) Runtime ######################################
-FROM ghcr.io/nodejs/node:22-alpine AS runtime
+FROM public.ecr.aws/docker/library/node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
