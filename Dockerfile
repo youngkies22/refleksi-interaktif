@@ -9,7 +9,7 @@
 # kalau suatu saat tidak ada prebuilt binary yang cocok untuk arsitektur target.
 
 ##################################### 1) Build Vue #####################################
-FROM node:22-bookworm-slim AS web-build
+FROM node:22-alpine AS web-build
 WORKDIR /app
 
 COPY web/package.json web/package-lock.json ./web/
@@ -20,12 +20,10 @@ COPY web ./web
 RUN cd web && npm run build
 
 ################################## 2) Build server TS ##################################
-FROM node:22-bookworm-slim AS server-build
+FROM node:22-alpine AS server-build
 WORKDIR /app
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -40,7 +38,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 ####################################### 3) Runtime ######################################
-FROM node:22-bookworm-slim AS runtime
+FROM node:22-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
