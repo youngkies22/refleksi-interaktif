@@ -157,7 +157,10 @@ export function duplikatPresentasi(id: number, guruId: number): { id: number } {
   return { id: duplikat() };
 }
 
-function ambilPresentasiMilik(id: number, guruId: number): BarisPresentasi {
+/** Diekspor juga untuk `rute/api/unggah.ts` — validasi kepemilikan sebelum
+ *  menaruh gambar ke dalam folder S3 `presentasi/{id}/...` milik presentasi
+ *  tersebut. */
+export function ambilPresentasiMilik(id: number, guruId: number): BarisPresentasi {
   const db = getDb();
   const baris = db.prepare('SELECT * FROM presentasi WHERE id = ?').get(id) as
     | BarisPresentasi

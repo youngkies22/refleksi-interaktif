@@ -94,7 +94,10 @@ export function hitungPoin(ketepatan: number, waktuMs: number, batasMs: number):
 /* ─────────────────────────── Unggahan ─────────────────────────── */
 
 export const UNGGAH = {
-  maksByte: 5 * 1024 * 1024,
+  // Batas berkas MENTAH yang boleh dikirim klien — hasil akhir yang disimpan
+  // jauh lebih kecil, lihat `TARGET_KOMPRESI_BYTE` di layanan/unggah.ts
+  // (kompresi otomatis menargetkan ~1 MB berapa pun ukuran aslinya).
+  maksByte: 50 * 1024 * 1024,
   mimeDiizinkan: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const,
 } as const;
 

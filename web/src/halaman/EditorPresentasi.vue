@@ -182,7 +182,7 @@ async function simpanSlide(payload: UbahSlideInput): Promise<void> {
       <!-- Editor slide terpilih -->
       <section class="bg-white rounded-2xl border border-slate-200 p-6">
         <template v-if="slideDipilih">
-          <FormSlide :slide="slideDipilih" :menyimpan="menyimpan" @simpan="simpanSlide" />
+          <FormSlide :slide="slideDipilih" :presentasi-id="presentasiId" :menyimpan="menyimpan" @simpan="simpanSlide" />
           <p v-if="pesanSimpan" class="text-sm text-green-600 mt-3">{{ pesanSimpan }}</p>
         </template>
         <p v-else class="text-slate-400 text-center py-12">
@@ -191,6 +191,11 @@ async function simpanSlide(payload: UbahSlideInput): Promise<void> {
       </section>
     </main>
 
-    <PemilihTipeSlide v-if="tampilkanPemilih" @pilih="(tipe, gambar) => tambahSlide(tipe, gambar)" @tutup="tampilkanPemilih = false" />
+    <PemilihTipeSlide
+      v-if="tampilkanPemilih"
+      :presentasi-id="presentasiId"
+      @pilih="(tipe, gambar) => tambahSlide(tipe, gambar)"
+      @tutup="tampilkanPemilih = false"
+    />
   </div>
 </template>

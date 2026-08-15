@@ -280,7 +280,7 @@ export async function ruteAdmin(app: FastifyInstance): Promise<void> {
       }
 
       const buffer = await berkas.toBuffer();
-      const { path } = await simpanGambarUnggahan(buffer);
+      const { path } = await simpanGambarUnggahan(buffer, 'admin/logo');
       const pengaturan = ubahLogo(path);
       catatLogAdmin(adminId, cariGuruById(adminId)?.nama ?? `#${adminId}`, 'ubah_pengaturan', 'aplikasi', null, 'Logo aplikasi diganti');
       return { pengaturan };

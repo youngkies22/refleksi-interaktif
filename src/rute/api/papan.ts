@@ -112,7 +112,7 @@ export async function rutePapan(app: FastifyInstance): Promise<void> {
   app.post<{ Params: ParamId }>('/api/papan/:id/reset', async (req, balas) => {
     try {
       const guruId = guruIdWajib(req);
-      return layanan.resetPapan(Number(req.params.id), guruId);
+      return await layanan.resetPapan(Number(req.params.id), guruId);
     } catch (e) {
       balas.status(statusDariGalat(e));
       return { galat: keGalatKirim(e) };
@@ -143,7 +143,7 @@ export async function rutePapan(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: ParamId }>('/api/papan/:id', async (req, balas) => {
     try {
       const guruId = guruIdWajib(req);
-      layanan.hapusPapan(Number(req.params.id), guruId);
+      await layanan.hapusPapan(Number(req.params.id), guruId);
       balas.status(204);
     } catch (e) {
       balas.status(statusDariGalat(e));
@@ -201,7 +201,7 @@ export async function rutePapan(app: FastifyInstance): Promise<void> {
     try {
       const guruId = guruIdWajib(req);
       const kartuId = Number(req.params.id);
-      const hasil = layanan.hapusKartu(kartuId, '', guruId);
+      const hasil = await layanan.hapusKartu(kartuId, '', guruId);
       app.io.to(`papan:${hasil.papanId}`).emit('papan:kartu_hapus', { kartuId });
       balas.status(204);
     } catch (e) {

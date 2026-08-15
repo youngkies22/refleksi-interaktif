@@ -1,8 +1,9 @@
 import fastifyMultipart from '@fastify/multipart';
 import type { FastifyInstance } from 'fastify';
 import { galatTerlaluCepat, galatTidakDitemukan, galatValidasi, keGalatKirim, statusDariGalat } from '../../galat.js';
-import { cariPapanIdDariKode, komentarKartu } from '../../layanan/papan.js';
-import { simpanGambarUnggahan } from '../../layanan/unggah.js';
+import { cariGuruById } from '../../layanan/auth.js';
+import { cariPapanIdDariKode, guruIdPemilikPapan, komentarKartu } from '../../layanan/papan.js';
+import { folderGuru, simpanGambarUnggahan } from '../../layanan/unggah.js';
 import { redisUmum } from '../../redis/client.js';
 import { kunci } from '../../redis/kunci.js';
 import { normalisasiKode } from '../../util/kode.js';
@@ -36,7 +37,7 @@ export async function ruteKartuPublik(app: FastifyInstance): Promise<void> {
    * (`ANTISPAM.kartuMaks` per `kartuJendelaDetik`) — masuk akal karena satu
    * unggahan biasanya dipasangkan dengan satu kartu.
    */
-  app.post<{ Params: { kode: string }; Querystring: { token?: string } }>(
+  app.post<{ Params: { kode: string }; Querystring: { token?: string; kolomId?: string } }>(
     '/api/papan/:kode/unggah',
     async (req, balas) => {
       try {
@@ -59,8 +60,20 @@ export async function ruteKartuPublik(app: FastifyInstance): Promise<void> {
           return { galat: { kode: 'VALIDASI', pesan: 'Tidak ada berkas yang diunggah.' } };
         }
 
+        // Folder S3 `guru/{id}-nama/papan/{id}/kolom/{id}/...` (atau
+        // `.../kolom/bebas` untuk kartu "dinding" tanpa kolom) — dilabeli
+        // guru PEMILIK papan (peserta yang unggah anonim, tidak punya sesi
+        // guru). kolomId murni dipakai untuk menyusun key, bukan divalidasi
+        // milik papan mana; peserta anonim tidak punya akses ke isi papan
+        // lain lewat ini, cuma nama foldernya saja.
+        const guruId = guruIdPemilikPapan(papanId);
+        const guru = cariGuruById(guruId);
+        const kolomMentah = Number(req.query.kolomId);
+        const kolom = Number.isInteger(kolomMentah) && kolomMentah > 0 ? String(kolomMentah) : 'bebas';
+        const folder = `${folderGuru(guruId, guru?.nama ?? `#${guruId}`)}/papan/${papanId}/kolom/${kolom}`;
+
         const buffer = await berkas.toBuffer();
-        return await simpanGambarUnggahan(buffer);
+        return await simpanGambarUnggahan(buffer, folder);
       } catch (e) {
         balas.status(statusDariGalat(e));
         return { galat: keGalatKirim(e) };

@@ -6,7 +6,7 @@ import draggable from 'vuedraggable';
 import { useRoute } from 'vue-router';
 import { apiUnggah } from '../api/unggah.js';
 import { GalatApi } from '../api/klien.js';
-import { ambilTokenTersimpan, simpanToken } from '../composables/usePeserta.js';
+import { ambilNamaTersimpan, ambilTokenTersimpan, simpanNama, simpanToken } from '../composables/usePeserta.js';
 import { useSocket } from '../composables/useSocket.js';
 import KartuVue from '../komponen/papan/Kartu.vue';
 import TombolKembali from '../komponen/umum/TombolKembali.vue';
@@ -37,6 +37,13 @@ const warnaBaru = ref('kuning');
 const lampiranBaru = ref(''); // path gambar hasil unggah, kosong = tanpa lampiran
 const mengunggahLampiran = ref(false);
 const galatUnggah = ref('');
+
+/** Keyed per kolomId, BUKAN `ref="..."` biasa — form "Tambah Kartu" (dan
+ *  input file di dalamnya) dirender di dalam `v-for="k in kolom"`, jadi
+ *  `ref` string biasa akan dikumpulkan Vue jadi ARRAY di `$refs` (satu per
+ *  kolom), bukan elemen tunggal — `.click()` di array selalu no-op tanpa
+ *  error. Ref function per-kolomId ini yang menghindarinya. */
+const refInputLampiran: Record<number, HTMLInputElement | null> = {};
 
 // Kelas Tailwind harus berupa string LITERAL agar dipindai compiler saat build —
 // interpolasi seperti `bg-${w}-200` tidak akan pernah menghasilkan CSS apa pun.
@@ -82,6 +89,10 @@ async function masuk(): Promise<void> {
       return;
     }
     simpanToken(`papan_${kode}`, b.data.token);
+    // Papan TIDAK punya tabel peserta di database (beda dari sesi kuis) —
+    // nama HARUS dikirim ulang tiap socket baru dibuat (reload halaman),
+    // jadi disimpan di sini supaya auto-rejoin di bawah bisa memakainya lagi.
+    simpanNama(`papan_${kode}`, nama.value);
     token.value = b.data.token;
     papan.value = b.data.papan;
     kolom.value = b.data.kolom;
@@ -125,17 +136,18 @@ async function prosesUnggahLampiran(berkas: File): Promise<void> {
     return;
   }
 
-  // Validasi ukuran (max 10 MB)
-  const MAX_SIZE = 10 * 1024 * 1024;
+  // Validasi ukuran (max 50 MB) — hasil akhir dikompres otomatis di server
+  // sampai sekitar 1 MB, jadi batas ini cuma jaring pengaman berkas mentah.
+  const MAX_SIZE = 50 * 1024 * 1024;
   if (berkas.size > MAX_SIZE) {
-    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 10 MB.`;
+    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 50 MB.`;
     return;
   }
 
   mengunggahLampiran.value = true;
   galatUnggah.value = '';
   try {
-    const r = await apiUnggah.gambarPapan(kode, token.value, berkas);
+    const r = await apiUnggah.gambarPapan(kode, token.value, berkas, formTerbuka.value);
     // Hapus gambar lama kalau ada
     if (lampiranBaru.value) {
       await apiUnggah.hapusGambar(lampiranBaru.value).catch(() => {});
@@ -241,6 +253,10 @@ onMounted(() => {
 
   const tokenLama = ambilTokenTersimpan(`papan_${kode}`);
   if (tokenLama) {
+    // Auto-rejoin pakai token lama TANPA lewat form nama — nama yang dulu
+    // diisi harus dimuat balik dari penyimpanan, kalau tidak `nama.value`
+    // tetap string kosong dan peserta jadi "Anonim" lagi tiap reload.
+    nama.value = ambilNamaTersimpan(`papan_${kode}`) ?? '';
     void masuk();
   } else if (guruAturId) {
     // Guru datang dari "Buka Papan Sekarang" — pakai nama akunnya sendiri,
@@ -400,13 +416,13 @@ onUnmounted(() => {
               <div v-else class="space-y-2">
                 <div
                   class="relative border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
-                  @click="($refs.inputLampiran as any)?.click?.()"
+                  @click="refInputLampiran[k.id]?.click()"
                   @dragover.prevent="(e) => (e.currentTarget as HTMLElement).classList.add('border-blue-400', 'bg-blue-50')"
                   @dragleave.prevent="(e) => (e.currentTarget as HTMLElement).classList.remove('border-blue-400', 'bg-blue-50')"
                   @drop="onDropLampiran"
                 >
                   <input
-                    ref="inputLampiran"
+                    :ref="(el) => { refInputLampiran[k.id] = el as HTMLInputElement | null }"
                     type="file"
                     accept="image/png,image/jpeg,image/webp,image/gif"
                     class="hidden"
@@ -416,7 +432,7 @@ onUnmounted(() => {
                   <div v-if="!mengunggahLampiran" class="space-y-1">
                     <p class="text-2xl">📷</p>
                     <p class="text-sm font-medium text-slate-700">Klik atau tarik gambar di sini</p>
-                    <p class="text-xs text-slate-500">PNG, JPEG, WebP, GIF (Max 10 MB)</p>
+                    <p class="text-xs text-slate-500">PNG, JPEG, WebP, GIF</p>
                   </div>
                   <div v-else class="space-y-1">
                     <p class="text-2xl">⏳</p>

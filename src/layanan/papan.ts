@@ -4,6 +4,7 @@ import { galatSesiDitutup, galatTidakDiizinkan, galatTidakDitemukan, galatValida
 import { log } from '../log.js';
 import { redisUmum } from '../redis/client.js';
 import { kunci } from '../redis/kunci.js';
+import { hapusGambarUnggahan } from './unggah.js';
 import { buatKode, normalisasiKode } from '../util/kode.js';
 import { BATAS, TTL_SESI_DETIK } from '../../shared/konstanta.js';
 import type {
@@ -80,6 +81,14 @@ export function papanMilikGuru(id: number, guruId: number): BarisPapan {
   const b = ambilPapan(id);
   if (b.guru_id !== guruId) throw galatTidakDitemukan('Papan tidak ditemukan.');
   return b;
+}
+
+/** Dipakai `rute/api/kartuPublik.ts` (unggah lampiran kartu, rute PUBLIK
+ *  tanpa login) untuk tahu folder S3 guru PEMILIK papan — bukan guru yang
+ *  login (peserta unggah anonim, tidak punya sesi guru sama sekali), tapi
+ *  guru yang membuat papannya. */
+export function guruIdPemilikPapan(papanId: number): number {
+  return ambilPapan(papanId).guru_id;
 }
 
 /* ────────────────────────────────── CRUD Papan (guru) ────────────────────────────────── */
@@ -296,9 +305,16 @@ export function ubahPapan(papanId: number, guruId: number, data: DataUbahPapan):
   );
 }
 
-export function hapusPapan(papanId: number, guruId: number): void {
+export async function hapusPapan(papanId: number, guruId: number): Promise<void> {
   papanMilikGuru(papanId, guruId);
+  // Kumpulkan dulu SEBELUM baris papan dihapus — `kartu` ikut lenyap lewat
+  // CASCADE begitu papan dihapus, jadi lampiran_path-nya sudah tidak terbaca lagi
+  // setelah itu (lihat `hapusKartu` untuk alasan yang sama soal berkas yatim).
+  const lampiran = getDb()
+    .prepare('SELECT lampiran_path FROM kartu WHERE papan_id = ? AND lampiran_path IS NOT NULL')
+    .all(papanId) as { lampiran_path: string }[];
   getDb().prepare('DELETE FROM papan WHERE id = ?').run(papanId);
+  await Promise.all(lampiran.map((k) => hapusGambarUnggahan(k.lampiran_path)));
 }
 
 interface BarisKartuCsv {
@@ -370,10 +386,14 @@ export function csvKartuPapan(papanId: number, guruId: number): string {
  * Mengembalikan jumlah kartu yang terhapus supaya UI bisa memberi konfirmasi
  * yang jujur ("12 kartu dihapus"), bukan sekadar "berhasil".
  */
-export function resetPapan(papanId: number, guruId: number): { dihapus: number } {
+export async function resetPapan(papanId: number, guruId: number): Promise<{ dihapus: number }> {
   papanMilikGuru(papanId, guruId);
+  const lampiran = getDb()
+    .prepare('SELECT lampiran_path FROM kartu WHERE papan_id = ? AND lampiran_path IS NOT NULL')
+    .all(papanId) as { lampiran_path: string }[];
   const info = getDb().prepare('DELETE FROM kartu WHERE papan_id = ?').run(papanId);
   log.info({ papanId, dihapus: info.changes }, 'Papan direset (semua kartu dihapus)');
+  await Promise.all(lampiran.map((k) => hapusGambarUnggahan(k.lampiran_path)));
   return { dihapus: info.changes };
 }
 
@@ -611,7 +631,7 @@ export function pindahKartu(kartuId: number, kolomId: number | null, urutan: num
   return ambilKartuLengkap(kartuId, null);
 }
 
-export function hapusKartu(kartuId: number, token: string, guruId?: number): { papanId: number } {
+export async function hapusKartu(kartuId: number, token: string, guruId?: number): Promise<{ papanId: number }> {
   const baris = ambilKartu(kartuId);
   if (baris.penulis_token !== token) {
     if (!guruId) throw galatTidakDiizinkan('Bukan kartu milikmu.');
@@ -619,6 +639,11 @@ export function hapusKartu(kartuId: number, token: string, guruId?: number): { p
     if (papan.guru_id !== guruId) throw galatTidakDiizinkan('Bukan kartu milikmu.');
   }
   getDb().prepare('DELETE FROM kartu WHERE id = ?').run(kartuId);
+  // Baris DB dihapus DULUAN (baru berkasnya) — kalau urutan dibalik dan proses
+  // mati di tengah, hasilnya kartu "hidup" tapi nunjuk ke gambar yang sudah
+  // hilang (rusak untuk pengguna); urutan ini paling buruk cuma nyisakan
+  // berkas yatim di storage, yang tidak terlihat pengguna sama sekali.
+  if (baris.lampiran_path) await hapusGambarUnggahan(baris.lampiran_path);
   return { papanId: baris.papan_id };
 }
 

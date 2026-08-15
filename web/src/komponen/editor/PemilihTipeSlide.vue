@@ -5,6 +5,7 @@ import { apiUnggah } from '../../api/unggah.js';
 import { GalatApi } from '../../api/klien.js';
 import { DAFTAR_TIPE, META_TIPE } from '../slide/metaTipe.js';
 
+const props = defineProps<{ presentasiId: number }>();
 const emit = defineEmits<{ pilih: [tipe: TipeSlide, gambarPath?: string]; tutup: [] }>();
 
 const tipeDipilih = ref<TipeSlide | null>(null);
@@ -34,17 +35,18 @@ async function prosesUnggahGambar(berkas: File): Promise<void> {
     return;
   }
 
-  // Validasi ukuran (max 10 MB)
-  const MAX_SIZE = 10 * 1024 * 1024;
+  // Validasi ukuran (max 50 MB) — hasil akhir dikompres otomatis di server
+  // sampai sekitar 1 MB, jadi batas ini cuma jaring pengaman berkas mentah.
+  const MAX_SIZE = 50 * 1024 * 1024;
   if (berkas.size > MAX_SIZE) {
-    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 10 MB.`;
+    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 50 MB.`;
     return;
   }
 
   mengunggah.value = true;
   galatUnggah.value = '';
   try {
-    const r = await apiUnggah.gambar(berkas);
+    const r = await apiUnggah.gambar(berkas, { presentasiId: props.presentasiId });
     gambarPath.value = r.path;
   } catch (e) {
     galatUnggah.value = e instanceof GalatApi ? e.message : 'Gagal mengunggah gambar.';
@@ -146,7 +148,7 @@ function kembaliKePilihan(): void {
                 <p class="text-5xl">🖼️</p>
                 <div>
                   <p class="text-lg font-bold text-slate-800">Klik atau tarik gambar di sini</p>
-                  <p class="text-sm text-slate-500 mt-1">PNG, JPEG, WebP, atau GIF (Max 10 MB)</p>
+                  <p class="text-sm text-slate-500 mt-1">PNG, JPEG, WebP, atau GIF</p>
                 </div>
               </div>
               <div v-else class="space-y-3">

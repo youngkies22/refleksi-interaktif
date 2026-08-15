@@ -141,12 +141,12 @@ export function daftarkanPapan(io: IoServer, socket: SocketRefleksi): void {
     }
   });
 
-  socket.on('papan:kartu_hapus', (d, ack) => {
+  socket.on('papan:kartu_hapus', async (d, ack) => {
     try {
       const { papanId, token, guruId } = socket.data;
       if (!papanId || !token) throw galatTidakDiizinkan('Belum bergabung ke papan ini.');
 
-      layanan.hapusKartu(d.kartuId, token, guruId);
+      await layanan.hapusKartu(d.kartuId, token, guruId);
       io.to(kamarPapan(papanId)).emit('papan:kartu_hapus', { kartuId: d.kartuId });
       ack({ ok: true, data: null });
     } catch (e) {

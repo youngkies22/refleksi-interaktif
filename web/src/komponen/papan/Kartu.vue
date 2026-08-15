@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Kartu, Komentar } from '@bersama/tipe';
 import { BATAS } from '@bersama/konstanta';
-import { ref, watch } from 'vue';
+import { onUnmounted, ref, watch } from 'vue';
 import { apiPapan } from '../../api/papan.js';
 
 const props = defineProps<{
@@ -26,6 +26,16 @@ const WARNA_BG: Record<string, string> = {
 const komentarTerbuka = ref(false);
 const daftarKomentar = ref<Komentar[] | null>(null);
 const isiKomentar = ref('');
+const lightboxTerbuka = ref(false);
+
+function tutupLightboxViaTombolEsc(e: KeyboardEvent): void {
+  if (e.key === 'Escape') lightboxTerbuka.value = false;
+}
+watch(lightboxTerbuka, (terbuka) => {
+  if (terbuka) window.addEventListener('keydown', tutupLightboxViaTombolEsc);
+  else window.removeEventListener('keydown', tutupLightboxViaTombolEsc);
+});
+onUnmounted(() => window.removeEventListener('keydown', tutupLightboxViaTombolEsc));
 
 async function muatKomentar(): Promise<void> {
   const r = await apiPapan.komentarKartu(props.kartu.id);
@@ -63,7 +73,21 @@ watch(
 
     <h3 v-if="kartu.judul" class="font-semibold text-slate-800 text-sm mb-1">{{ kartu.judul }}</h3>
     <p class="text-slate-700 text-sm whitespace-pre-wrap">{{ kartu.isi }}</p>
-    <img v-if="kartu.lampiranPath" :src="kartu.lampiranPath" class="mt-2 rounded-lg max-w-full" />
+
+    <button
+      v-if="kartu.lampiranPath"
+      type="button"
+      class="group relative mt-2 block w-full overflow-hidden rounded-lg"
+      title="Klik untuk memperbesar"
+      @click="lightboxTerbuka = true"
+    >
+      <img :src="kartu.lampiranPath" class="h-32 w-full object-cover transition-transform group-hover:scale-105" />
+      <span
+        class="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100"
+      >
+        <span class="rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">🔍 Perbesar</span>
+      </span>
+    </button>
 
     <div class="flex items-center justify-between mt-1 text-xs text-slate-500">
       <span class="truncate">{{ kartu.penulisNama || 'Anonim' }}</span>
@@ -111,4 +135,28 @@ watch(
       </form>
     </div>
   </div>
+
+  <!-- Teleport ke body: lightbox tidak boleh terjebak overflow-x-auto kolom
+       papan (lihat Papan.vue) atau ke-crop batas kartu. -->
+  <Teleport to="body">
+    <div
+      v-if="lightboxTerbuka"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 sm:p-8"
+      @click.self="lightboxTerbuka = false"
+    >
+      <button
+        type="button"
+        class="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white text-xl hover:bg-white/20 transition-colors"
+        title="Tutup"
+        @click="lightboxTerbuka = false"
+      >
+        ✕
+      </button>
+      <img
+        :src="kartu.lampiranPath ?? undefined"
+        class="max-h-full max-w-full rounded-xl object-contain shadow-2xl"
+        @click.stop
+      />
+    </div>
+  </Teleport>
 </template>

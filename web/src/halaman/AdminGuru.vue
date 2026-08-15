@@ -364,22 +364,39 @@ async function ujiS3(): Promise<void> {
   }
 }
 
-/* ────────────────── Manajemen Gambar ────────────────── */
+/* ────────────────── Manajemen Gambar (drill-down: guru → papan/presentasi → gambar) ────────────────── */
 
-const daftarGambar = ref<Array<{ nama: string; path: string; ukuranByte: number; tanggal: string; tipe: 'lokal' | 's3' }>>([]);
+type EntriFolderGambar = { label: string; path: string; jenis: 'guru' | 'papan' | 'presentasi' };
+type EntriGambar = { nama: string; path: string; ukuranByte: number; tanggal: string; tipe: 'lokal' | 's3' };
+
+// Breadcrumb: root selalu ada (label "Semua Guru", path ''); tiap klik folder menambah satu entri.
+const jejakGambar = ref<Array<{ label: string; path: string }>>([{ label: 'Semua Guru', path: '' }]);
+const modeGambar = ref<'folder' | 'gambar'>('folder');
+const daftarFolderGambar = ref<EntriFolderGambar[]>([]);
+const daftarGambar = ref<EntriGambar[]>([]);
 const pemakaianGambar = ref({ byte: 0, mb: 0 });
 const memautGambar = ref(false);
 const gatatGambar = ref('');
 const sudahMuatGambar = ref(false);
 
-async function muatDaftarGambar(): Promise<void> {
+const jalurGambarAktif = computed(() => jejakGambar.value[jejakGambar.value.length - 1]!.path);
+
+const IKON_JENIS: Record<EntriFolderGambar['jenis'], string> = { guru: '👤', papan: '🗂️', presentasi: '🎞️' };
+
+async function muatJelajahGambar(): Promise<void> {
   memautGambar.value = true;
   sudahMuatGambar.value = true;
   gatatGambar.value = '';
   try {
-    const r = await apiUnggah.daftarGambar(100, 0);
-    daftarGambar.value = r.gambar;
-    pemakaianGambar.value = r.pemakaian;
+    const r = await apiUnggah.jelajah(jalurGambarAktif.value, 100, 0);
+    if (r.tipe === 'folder') {
+      modeGambar.value = 'folder';
+      daftarFolderGambar.value = r.folder;
+    } else {
+      modeGambar.value = 'gambar';
+      daftarGambar.value = r.gambar;
+      pemakaianGambar.value = r.pemakaian;
+    }
   } catch (e) {
     gatatGambar.value = e instanceof GalatApi ? e.message : 'Gagal memuat daftar gambar.';
   } finally {
@@ -387,11 +404,22 @@ async function muatDaftarGambar(): Promise<void> {
   }
 }
 
+function bukaFolderGambar(f: EntriFolderGambar): void {
+  jejakGambar.value.push({ label: f.label, path: f.path });
+  void muatJelajahGambar();
+}
+
+/** Klik breadcrumb — potong jejak sampai index itu, lalu muat ulang. */
+function kembaliKeJejakGambar(index: number): void {
+  jejakGambar.value = jejakGambar.value.slice(0, index + 1);
+  void muatJelajahGambar();
+}
+
 async function hapusGambarAdmin(path: string, nama: string): Promise<void> {
   if (!confirm(`Hapus gambar "${nama}"?`)) return;
   try {
     await apiUnggah.hapusGambar(path);
-    await muatDaftarGambar();
+    await muatJelajahGambar();
   } catch (e) {
     gatatGambar.value = e instanceof GalatApi ? e.message : 'Gagal menghapus gambar.';
   }
@@ -411,7 +439,7 @@ const tabs = computed(() => [
 // Auto-muat daftar gambar saat pertama kali membuka tab gambar
 watch(tabAktif, (tab) => {
   if (tab === 'gambar' && !sudahMuatGambar.value) {
-    void muatDaftarGambar();
+    void muatJelajahGambar();
   }
 });
 
@@ -942,11 +970,11 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
           <div class="flex items-center justify-between mb-4">
             <div>
               <h2 class="text-lg font-semibold text-slate-700">🖼️ Manajemen Gambar</h2>
-              <p class="text-xs text-slate-400 mt-1">Kelola semua gambar yang diunggah di slide & kartu papan</p>
+              <p class="text-xs text-slate-400 mt-1">Telusuri per guru → papan/presentasi → gambar</p>
             </div>
             <button
               type="button"
-              @click="muatDaftarGambar"
+              @click="muatJelajahGambar"
               :disabled="memautGambar"
               class="text-sm text-blue-600 hover:text-blue-700 font-medium px-4 py-2 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
             >
@@ -954,66 +982,105 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
             </button>
           </div>
 
-          <!-- Storage info -->
-          <div class="grid sm:grid-cols-3 gap-3 mb-6">
-            <div class="bg-blue-50 rounded-xl p-3 border border-blue-200">
-              <p class="text-xs text-blue-600 font-medium">Total Gambar</p>
-              <p class="text-2xl font-bold text-blue-700 mt-1">{{ daftarGambar.length }}</p>
-            </div>
-            <div class="bg-violet-50 rounded-xl p-3 border border-violet-200">
-              <p class="text-xs text-violet-600 font-medium">Pemakaian Storage</p>
-              <p class="text-2xl font-bold text-violet-700 mt-1">{{ pemakaianGambar.mb }} MB</p>
-            </div>
-            <div class="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
-              <p class="text-xs text-emerald-600 font-medium">Rata-rata Ukuran</p>
-              <p class="text-2xl font-bold text-emerald-700 mt-1">
-                {{ daftarGambar.length > 0 ? Math.round(pemakaianGambar.byte / daftarGambar.length / 1024) : 0 }} KB
-              </p>
-            </div>
-          </div>
+          <!-- Breadcrumb -->
+          <nav class="flex items-center flex-wrap gap-1 text-sm mb-5">
+            <template v-for="(j, i) in jejakGambar" :key="j.path">
+              <button
+                type="button"
+                class="px-2 py-1 rounded-lg transition-colors"
+                :class="i === jejakGambar.length - 1 ? 'font-semibold text-slate-700 cursor-default' : 'text-blue-600 hover:bg-blue-50'"
+                :disabled="i === jejakGambar.length - 1"
+                @click="kembaliKeJejakGambar(i)"
+              >
+                {{ j.label }}
+              </button>
+              <span v-if="i < jejakGambar.length - 1" class="text-slate-300">/</span>
+            </template>
+          </nav>
 
           <!-- Error -->
           <p v-if="gatatGambar" class="text-sm text-red-600 bg-red-50 rounded-lg p-3 mb-4">{{ gatatGambar }}</p>
 
           <!-- Loading state -->
           <div v-if="memautGambar" class="text-center py-12">
-            <p class="text-slate-400">Memuat daftar gambar...</p>
+            <p class="text-slate-400">Memuat...</p>
           </div>
 
-          <!-- Empty state -->
-          <div v-else-if="daftarGambar.length === 0" class="text-center py-12">
-            <p class="text-3xl mb-2">📭</p>
-            <p class="text-slate-400">Belum ada gambar yang diunggah</p>
-          </div>
+          <!-- ═══ Level folder: daftar guru, atau daftar papan/presentasi milik satu guru ═══ -->
+          <template v-else-if="modeGambar === 'folder'">
+            <div v-if="daftarFolderGambar.length === 0" class="text-center py-12">
+              <p class="text-3xl mb-2">📭</p>
+              <p class="text-slate-400">Belum ada gambar yang diunggah di sini</p>
+            </div>
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <button
+                v-for="f in daftarFolderGambar"
+                :key="f.path"
+                type="button"
+                class="flex items-center gap-3 rounded-xl border border-slate-200 p-4 text-left hover:border-blue-400 hover:bg-blue-50 transition-colors"
+                @click="bukaFolderGambar(f)"
+              >
+                <span class="text-2xl">{{ IKON_JENIS[f.jenis] }}</span>
+                <span class="text-sm font-medium text-slate-700 truncate">{{ f.label }}</span>
+              </button>
+            </div>
+          </template>
 
-          <!-- Gallery grid -->
-          <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            <div v-for="(gambar, i) in daftarGambar" :key="i" class="group relative rounded-xl overflow-hidden bg-slate-100">
-              <!-- Image preview -->
-              <img :src="gambar.path" :alt="gambar.nama" class="w-full h-40 object-cover" />
-
-              <!-- Overlay -->
-              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-colors flex flex-col items-center justify-center opacity-0 group-hover:opacity-100">
-                <button
-                  type="button"
-                  @click="hapusGambarAdmin(gambar.path, gambar.nama)"
-                  class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                >
-                  🗑️ Hapus
-                </button>
+          <!-- ═══ Level gambar: isi satu folder papan/presentasi ═══ -->
+          <template v-else>
+            <!-- Storage info -->
+            <div class="grid sm:grid-cols-3 gap-3 mb-6">
+              <div class="bg-blue-50 rounded-xl p-3 border border-blue-200">
+                <p class="text-xs text-blue-600 font-medium">Total Gambar</p>
+                <p class="text-2xl font-bold text-blue-700 mt-1">{{ daftarGambar.length }}</p>
               </div>
-
-              <!-- Info -->
-              <div class="p-2 space-y-1">
-                <p class="text-xs font-medium text-slate-700 truncate" :title="gambar.nama">{{ gambar.nama }}</p>
-                <div class="flex items-center justify-between text-xs text-slate-500">
-                  <span>{{ (gambar.ukuranByte / 1024).toFixed(0) }} KB</span>
-                  <span class="text-blue-600 font-medium">{{ gambar.tipe === 's3' ? 'S3' : 'Disk' }}</span>
-                </div>
-                <p class="text-[10px] text-slate-400">{{ new Date(gambar.tanggal).toLocaleDateString('id-ID') }}</p>
+              <div class="bg-violet-50 rounded-xl p-3 border border-violet-200">
+                <p class="text-xs text-violet-600 font-medium">Pemakaian Storage</p>
+                <p class="text-2xl font-bold text-violet-700 mt-1">{{ pemakaianGambar.mb }} MB</p>
+              </div>
+              <div class="bg-emerald-50 rounded-xl p-3 border border-emerald-200">
+                <p class="text-xs text-emerald-600 font-medium">Rata-rata Ukuran</p>
+                <p class="text-2xl font-bold text-emerald-700 mt-1">
+                  {{ daftarGambar.length > 0 ? Math.round(pemakaianGambar.byte / daftarGambar.length / 1024) : 0 }} KB
+                </p>
               </div>
             </div>
-          </div>
+
+            <!-- Empty state -->
+            <div v-if="daftarGambar.length === 0" class="text-center py-12">
+              <p class="text-3xl mb-2">📭</p>
+              <p class="text-slate-400">Belum ada gambar di folder ini</p>
+            </div>
+
+            <!-- Gallery grid -->
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              <div v-for="(gambar, i) in daftarGambar" :key="i" class="group relative rounded-xl overflow-hidden bg-slate-100">
+                <!-- Image preview -->
+                <img :src="gambar.path" :alt="gambar.nama" class="w-full h-40 object-cover" />
+
+                <!-- Overlay -->
+                <div class="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-colors flex flex-col items-center justify-center opacity-0 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    @click="hapusGambarAdmin(gambar.path, gambar.nama)"
+                    class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    🗑️ Hapus
+                  </button>
+                </div>
+
+                <!-- Info -->
+                <div class="p-2 space-y-1">
+                  <p class="text-xs font-medium text-slate-700 truncate" :title="gambar.nama">{{ gambar.nama }}</p>
+                  <div class="flex items-center justify-between text-xs text-slate-500">
+                    <span>{{ (gambar.ukuranByte / 1024).toFixed(0) }} KB</span>
+                    <span class="text-blue-600 font-medium">{{ gambar.tipe === 's3' ? 'S3' : 'Disk' }}</span>
+                  </div>
+                  <p class="text-[10px] text-slate-400">{{ new Date(gambar.tanggal).toLocaleDateString('id-ID') }}</p>
+                </div>
+              </div>
+            </div>
+          </template>
         </section>
       </div>
 

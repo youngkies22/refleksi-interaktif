@@ -9,7 +9,7 @@ import { GalatApi } from '../../api/klien.js';
 import { META_TIPE } from '../slide/metaTipe.js';
 import EditorAreaGambar from './EditorAreaGambar.vue';
 
-const props = defineProps<{ slide: Slide; menyimpan: boolean }>();
+const props = defineProps<{ slide: Slide; presentasiId: number; menyimpan: boolean }>();
 const emit = defineEmits<{ simpan: [payload: UbahSlideInput] }>();
 
 const meta = computed(() => META_TIPE[props.slide.tipe]);
@@ -82,17 +82,18 @@ async function prosesUnggahGambar(berkas: File): Promise<void> {
     return;
   }
 
-  // Validasi ukuran (max 10 MB)
-  const MAX_SIZE = 10 * 1024 * 1024;
+  // Validasi ukuran (max 50 MB) — hasil akhir dikompres otomatis di server
+  // sampai sekitar 1 MB, jadi batas ini cuma jaring pengaman berkas mentah.
+  const MAX_SIZE = 50 * 1024 * 1024;
   if (berkas.size > MAX_SIZE) {
-    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 10 MB, file ini ${(berkas.size / 1024 / 1024).toFixed(1)} MB.`;
+    galatUnggah.value = `Ukuran file terlalu besar. Maksimal 50 MB, file ini ${(berkas.size / 1024 / 1024).toFixed(1)} MB.`;
     return;
   }
 
   mengunggah.value = true;
   galatUnggah.value = '';
   try {
-    const r = await apiUnggah.gambar(berkas);
+    const r = await apiUnggah.gambar(berkas, { presentasiId: props.presentasiId, slideId: props.slide.id });
     konfigGambarPath.value = r.path;
     konfigAreaBenar.value = undefined; // gambar baru, area lama tidak relevan lagi
   } catch (e) {
@@ -124,17 +125,18 @@ async function prosesUnggahGambarPertanyaan(berkas: File): Promise<void> {
     return;
   }
 
-  // Validasi ukuran (max 10 MB)
-  const MAX_SIZE = 10 * 1024 * 1024;
+  // Validasi ukuran (max 50 MB) — hasil akhir dikompres otomatis di server
+  // sampai sekitar 1 MB, jadi batas ini cuma jaring pengaman berkas mentah.
+  const MAX_SIZE = 50 * 1024 * 1024;
   if (berkas.size > MAX_SIZE) {
-    galatUnggahGambarPertanyaan.value = `Ukuran file terlalu besar. Maksimal 10 MB.`;
+    galatUnggahGambarPertanyaan.value = `Ukuran file terlalu besar. Maksimal 50 MB.`;
     return;
   }
 
   mengunggahGambarPertanyaan.value = true;
   galatUnggahGambarPertanyaan.value = '';
   try {
-    const r = await apiUnggah.gambar(berkas);
+    const r = await apiUnggah.gambar(berkas, { presentasiId: props.presentasiId, slideId: props.slide.id });
     konfigGambarPertanyaan.value = r.path;
   } catch (e) {
     galatUnggahGambarPertanyaan.value = e instanceof GalatApi ? e.message : 'Gagal mengunggah gambar.';
@@ -266,7 +268,7 @@ function simpan(): void {
             <div v-if="!mengunggahGambarPertanyaan" class="space-y-1">
               <p class="text-2xl">🖼️</p>
               <p class="text-sm font-medium text-slate-700">Klik atau tarik gambar di sini</p>
-              <p class="text-xs text-slate-500">PNG, JPEG, WebP, GIF (Max 10 MB)</p>
+              <p class="text-xs text-slate-500">PNG, JPEG, WebP, GIF</p>
             </div>
             <div v-else class="space-y-1">
               <p class="text-2xl">⏳</p>
@@ -359,7 +361,7 @@ function simpan(): void {
           <div v-if="!mengunggah" class="space-y-2">
             <p class="text-3xl">🖼️</p>
             <p class="text-sm font-medium text-slate-700">Klik atau tarik gambar ke sini</p>
-            <p class="text-xs text-slate-500">PNG, JPEG, WebP, atau GIF (Max 10 MB)</p>
+            <p class="text-xs text-slate-500">PNG, JPEG, WebP, atau GIF</p>
           </div>
           <div v-else class="space-y-2">
             <p class="text-2xl">⏳</p>
