@@ -77,13 +77,16 @@ watch(
     <button
       v-if="kartu.lampiranPath"
       type="button"
-      class="group relative mt-2 block w-full overflow-hidden rounded-lg"
+      class="group relative mt-2 block w-full overflow-hidden rounded-lg bg-black/5"
       title="Klik untuk memperbesar"
       @click="lightboxTerbuka = true"
     >
-      <img :src="kartu.lampiranPath" class="h-32 w-full object-cover transition-transform group-hover:scale-105" />
+      <img
+        :src="kartu.lampiranPath"
+        class="h-40 sm:h-52 w-full object-contain transition-transform group-hover:scale-105"
+      />
       <span
-        class="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100"
+        class="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100"
       >
         <span class="rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">🔍 Perbesar</span>
       </span>
