@@ -55,6 +55,7 @@ interface BarisPengaturanS3 {
   s3_access_key: string | null;
   s3_secret_key: string | null;
   s3_url_publik: string | null;
+  s3_mode: 'lokal' | 's3';
 }
 
 export interface KonfigS3 {
@@ -65,6 +66,12 @@ export interface KonfigS3 {
   secretKey: string;
   /** Override URL publik — WAJIB untuk Cloudflare R2, lihat `layanan/s3Klien.ts`. */
   urlPublik: string;
+  /** Pilihan admin, lihat `ubahModeS3()` — TERPISAH dari `lengkap`. */
+  mode: 'lokal' | 's3';
+  /** endpoint/bucket/accessKey/secretKey semuanya terisi. */
+  lengkap: boolean;
+  /** `mode === 's3'` DAN `lengkap` — satu-satunya yang dibaca pemanggil di
+   *  `layanan/unggah.ts` untuk memutuskan tujuan penyimpanan sesungguhnya. */
   aktif: boolean;
 }
 
@@ -74,7 +81,7 @@ export interface KonfigS3 {
 export function ambilKonfigS3(): KonfigS3 {
   const b = getDb()
     .prepare(
-      'SELECT s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_url_publik FROM pengaturan WHERE id = 1',
+      'SELECT s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_url_publik, s3_mode FROM pengaturan WHERE id = 1',
     )
     .get() as BarisPengaturanS3;
 
@@ -82,6 +89,7 @@ export function ambilKonfigS3(): KonfigS3 {
   const bucket = b.s3_bucket ?? '';
   const accessKey = b.s3_access_key ?? '';
   const secretKey = b.s3_secret_key ?? '';
+  const lengkap = endpoint !== '' && bucket !== '' && accessKey !== '' && secretKey !== '';
 
   return {
     endpoint,
@@ -90,7 +98,9 @@ export function ambilKonfigS3(): KonfigS3 {
     accessKey,
     secretKey,
     urlPublik: b.s3_url_publik ?? '',
-    aktif: endpoint !== '' && bucket !== '' && accessKey !== '' && secretKey !== '',
+    mode: b.s3_mode,
+    lengkap,
+    aktif: b.s3_mode === 's3' && lengkap,
   };
 }
 
@@ -105,6 +115,8 @@ export function ambilKonfigS3Admin(): PengaturanS3Admin {
     accessKey: k.accessKey,
     urlPublik: k.urlPublik,
     secretKeyDiatur: k.secretKey !== '',
+    mode: k.mode,
+    lengkap: k.lengkap,
     aktif: k.aktif,
   };
 }
@@ -152,15 +164,36 @@ export function ubahKonfigS3(data: DataUbahS3): PengaturanS3Admin {
   return ambilKonfigS3Admin();
 }
 
-/** Kembali ke penyimpanan disk lokal — kosongkan seluruh kolom S3. */
+/** Kembali ke penyimpanan disk lokal — kosongkan seluruh kolom S3 (termasuk
+ *  mode). Beda dari `ubahModeS3('lokal')`: ini MENGHAPUS kredensial, dipakai
+ *  saat admin memang ingin melepas konfigurasi S3 sepenuhnya, bukan sekadar
+ *  menonaktifkannya sementara. */
 export function hapusKonfigS3(): PengaturanS3Admin {
   getDb()
     .prepare(
       `UPDATE pengaturan SET
          s3_endpoint = NULL, s3_bucket = NULL, s3_access_key = NULL, s3_secret_key = NULL, s3_url_publik = NULL,
-         updated_at = datetime('now')
+         s3_mode = 'lokal', updated_at = datetime('now')
        WHERE id = 1`,
     )
     .run();
+  return ambilKonfigS3Admin();
+}
+
+/**
+ * Pindah mode penyimpanan aktif — TERPISAH dari isi field (lihat `KonfigS3.mode`
+ * vs `.lengkap`). Menyimpan kredensial lewat `ubahKonfigS3()` tidak lagi
+ * otomatis mengaktifkan S3; admin harus eksplisit pindah ke sini, dan bisa
+ * balik ke lokal kapan saja tanpa kehilangan kredensial yang sudah tersimpan.
+ *
+ * Pindah ke `'s3'` ditolak kalau kredensial belum lengkap — mencegah mode
+ * "aktif" tapi tidak benar-benar bisa dipakai (baca: `simpanGambarUnggahan`
+ * akan diam-diam gagal connect kalau ini tidak dicegah di sini).
+ */
+export function ubahModeS3(mode: 'lokal' | 's3'): PengaturanS3Admin {
+  if (mode === 's3' && !ambilKonfigS3().lengkap) {
+    throw galatValidasi('Lengkapi dan simpan endpoint, bucket, access key, dan secret key dulu sebelum mengaktifkan S3.');
+  }
+  getDb().prepare(`UPDATE pengaturan SET s3_mode = ?, updated_at = datetime('now') WHERE id = 1`).run(mode);
   return ambilKonfigS3Admin();
 }

@@ -152,4 +152,7 @@ export const apiAdmin = {
   hapusPengaturanS3: () => panggil<{ pengaturan: PengaturanS3Admin }>('/api/admin/pengaturan/s3', { method: 'DELETE' }),
 
   ujiPengaturanS3: (data: DataUbahS3) => panggil<{ ok: true }>('/api/admin/pengaturan/s3/uji', { method: 'POST', body: JSON.stringify(data) }),
+
+  ubahModePengaturanS3: (mode: 'lokal' | 's3') =>
+    patch<{ pengaturan: PengaturanS3Admin }>('/api/admin/pengaturan/s3/mode', { mode }),
 };

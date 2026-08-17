@@ -268,10 +268,13 @@ async function hapusLogo(): Promise<void> {
 
 const s3Form = reactive({ endpoint: '', region: 'us-east-1', bucket: '', accessKey: '', secretKey: '', urlPublik: '' });
 const s3SecretKeyDiatur = ref(false);
+const s3Mode = ref<'lokal' | 's3'>('lokal');
+const s3Lengkap = ref(false);
 const s3Aktif = ref(false);
 const s3Memuat = ref(true);
 const s3Menyimpan = ref(false);
 const s3Menguji = ref(false);
+const s3MengubahMode = ref(false);
 const s3HasilUji = ref<{ ok: boolean; pesan: string } | null>(null);
 
 /** Cloudflare R2: endpoint S3-nya privat, gambar TIDAK BISA disajikan dari
@@ -291,6 +294,8 @@ async function muatS3(): Promise<void> {
     s3Form.secretKey = '';
     s3Form.urlPublik = r.pengaturan.urlPublik;
     s3SecretKeyDiatur.value = r.pengaturan.secretKeyDiatur;
+    s3Mode.value = r.pengaturan.mode;
+    s3Lengkap.value = r.pengaturan.lengkap;
     s3Aktif.value = r.pengaturan.aktif;
   } catch (e) {
     galat.value = e instanceof GalatApi ? e.message : 'Gagal memuat pengaturan object storage.';
@@ -299,6 +304,23 @@ async function muatS3(): Promise<void> {
   }
 }
 onMounted(muatS3);
+
+async function pindahModeS3(mode: 'lokal' | 's3'): Promise<void> {
+  if (mode === s3Mode.value) return;
+  galat.value = '';
+  s3HasilUji.value = null;
+  s3MengubahMode.value = true;
+  try {
+    const r = await apiAdmin.ubahModePengaturanS3(mode);
+    s3Mode.value = r.pengaturan.mode;
+    s3Aktif.value = r.pengaturan.aktif;
+    await muatLog();
+  } catch (e) {
+    galat.value = e instanceof GalatApi ? e.message : 'Gagal mengubah mode penyimpanan.';
+  } finally {
+    s3MengubahMode.value = false;
+  }
+}
 
 async function simpanS3(): Promise<void> {
   galat.value = '';
@@ -314,6 +336,8 @@ async function simpanS3(): Promise<void> {
       urlPublik: s3Form.urlPublik,
     });
     s3SecretKeyDiatur.value = r.pengaturan.secretKeyDiatur;
+    s3Mode.value = r.pengaturan.mode;
+    s3Lengkap.value = r.pengaturan.lengkap;
     s3Aktif.value = r.pengaturan.aktif;
     s3Form.secretKey = '';
     await muatLog();
@@ -337,7 +361,9 @@ async function hapusS3(): Promise<void> {
     s3Form.secretKey = '';
     s3Form.urlPublik = '';
     s3SecretKeyDiatur.value = false;
-    s3Aktif.value = false;
+    s3Mode.value = r.pengaturan.mode;
+    s3Lengkap.value = r.pengaturan.lengkap;
+    s3Aktif.value = r.pengaturan.aktif;
     await muatLog();
   } catch (e) {
     galat.value = e instanceof GalatApi ? e.message : 'Gagal menghapus pengaturan object storage.';
@@ -702,11 +728,43 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
           <p class="text-xs text-slate-400 mb-4">
             Tempat gambar unggahan (slide pin-jawaban, logo, lampiran kartu papan) disimpan — gambar dikompres
             otomatis sebelum diunggah. Kompatibel dengan penyedia S3 mana pun (NevaObjects, Cloudflare R2, MinIO,
-            dll). Kosongkan semua field & hapus untuk kembali menyimpan di disk lokal server.
+            dll). Kredensial di bawah bisa disimpan & diuji tanpa langsung dipakai — pilih mode aktifnya sendiri.
           </p>
 
           <p v-if="s3Memuat" class="text-sm text-slate-400">Memuat...</p>
-          <form v-else class="space-y-3" @submit.prevent="simpanS3">
+          <template v-else>
+            <div class="mb-5">
+              <label class="block text-xs font-medium text-slate-500 mb-1.5">Penyimpanan gambar baru</label>
+              <div class="inline-flex rounded-xl border border-slate-300 p-1 bg-slate-50">
+                <button
+                  type="button"
+                  :disabled="s3MengubahMode"
+                  class="rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50"
+                  :class="s3Mode === 'lokal' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                  @click="pindahModeS3('lokal')"
+                >
+                  💾 Disk Lokal
+                </button>
+                <button
+                  type="button"
+                  :disabled="s3MengubahMode || !s3Lengkap"
+                  :title="s3Lengkap ? '' : 'Lengkapi & simpan endpoint, bucket, access key, dan secret key dulu'"
+                  class="rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  :class="s3Mode === 's3' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                  @click="pindahModeS3('s3')"
+                >
+                  ☁️ S3
+                </button>
+              </div>
+              <p class="text-xs mt-2" :class="s3Aktif ? 'text-emerald-600' : 'text-slate-400'">
+                {{ s3Aktif ? '● Aktif — gambar baru diunggah ke S3.' : '○ Gambar baru disimpan di disk lokal server.' }}
+              </p>
+              <p v-if="!s3Lengkap" class="text-[11px] text-slate-400 mt-1">
+                Mode S3 baru bisa dipilih setelah kredensial di bawah lengkap & tersimpan.
+              </p>
+            </div>
+
+            <form class="space-y-3" @submit.prevent="simpanS3">
             <div class="grid sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium text-slate-500 mb-1">Endpoint</label>
@@ -782,9 +840,6 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
               </div>
             </div>
 
-            <p class="text-xs" :class="s3Aktif ? 'text-emerald-600' : 'text-slate-400'">
-              {{ s3Aktif ? '● Aktif — gambar baru diunggah ke S3.' : '○ Belum aktif — gambar baru disimpan di disk lokal server.' }}
-            </p>
             <p v-if="s3HasilUji" class="text-xs" :class="s3HasilUji.ok ? 'text-emerald-600' : 'text-red-600'">
               {{ s3HasilUji.ok ? '✅' : '❌' }} {{ s3HasilUji.pesan }}
             </p>
@@ -806,7 +861,7 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
                 {{ s3Menguji ? 'Menguji...' : 'Uji Koneksi' }}
               </button>
               <button
-                v-if="s3Aktif"
+                v-if="s3Lengkap || s3SecretKeyDiatur"
                 type="button"
                 class="text-sm text-slate-400 hover:text-red-600 px-2"
                 @click="hapusS3"
@@ -814,7 +869,8 @@ async function hapusAkun(g: GuruAdmin): Promise<void> {
                 Hapus Konfigurasi
               </button>
             </div>
-          </form>
+            </form>
+          </template>
         </section>
 
         <section class="bg-white rounded-2xl border border-slate-200 p-6">

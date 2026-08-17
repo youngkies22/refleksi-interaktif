@@ -60,8 +60,13 @@ export function seedS3(): void {
   }
   if (!config.s3.aktif) return; // S3_* tidak diisi di env — tetap pakai disk lokal
 
+  // `s3_mode = 's3'` di sini (bukan biarkan bawaan 'lokal') supaya S3_* di env
+  // langsung terpakai seperti didokumentasikan di .env.contoh — env var ini
+  // cuma dibaca sekali saat baris pengaturan masih kosong, jadi kalau tidak
+  // diaktifkan sekalian di sini, admin harus tahu untuk menyalakannya manual
+  // lewat panel walau sudah mengisi S3_* di .env.
   db.prepare(
-    `UPDATE pengaturan SET s3_endpoint = ?, s3_region = ?, s3_bucket = ?, s3_access_key = ?, s3_secret_key = ?, s3_url_publik = ? WHERE id = 1`,
+    `UPDATE pengaturan SET s3_endpoint = ?, s3_region = ?, s3_bucket = ?, s3_access_key = ?, s3_secret_key = ?, s3_url_publik = ?, s3_mode = 's3' WHERE id = 1`,
   ).run(
     config.s3.endpoint,
     config.s3.region,

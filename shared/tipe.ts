@@ -312,8 +312,15 @@ export interface PengaturanS3Admin {
    *  atau subdomain `*.r2.dev`) karena endpoint S3 R2 sendiri bersifat privat. */
   urlPublik: string;
   secretKeyDiatur: boolean;
-  /** true kalau endpoint/bucket/accessKey/secretKey terisi — gambar baru
-   *  diunggah ke S3; false = disk lokal. */
+  /** Pilihan admin — 's3' cuma bisa aktif kalau `lengkap` true (lihat `ubahModeS3`
+   *  di `layanan/pengaturan.ts`). Terpisah dari isi field: mengetik/menyimpan
+   *  kredensial TIDAK otomatis mengaktifkan S3, harus di-toggle eksplisit. */
+  mode: 'lokal' | 's3';
+  /** true kalau endpoint/bucket/accessKey/secretKey semuanya terisi — syarat
+   *  supaya `mode` boleh dipindah ke 's3'. */
+  lengkap: boolean;
+  /** true kalau `mode === 's3'` DAN `lengkap` — gambar baru diunggah ke S3;
+   *  false = disk lokal. */
   aktif: boolean;
 }
 

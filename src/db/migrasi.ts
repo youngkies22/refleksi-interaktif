@@ -245,6 +245,28 @@ const daftar: Migrasi[] = [
       ALTER TABLE pengaturan ADD COLUMN s3_url_publik TEXT;
     `,
   },
+  {
+    versi: 6,
+    nama: 'pengaturan-s3-mode',
+    sql: /* sql */ `
+      -- Pilihan penyimpanan EKSPLISIT, terpisah dari isi kolom s3_*: sebelum ini,
+      -- S3 otomatis "aktif" begitu keempat field wajib terisi, dan satu-satunya
+      -- jalan balik ke lokal adalah menghapus kredensial. Kolom ini memisahkan
+      -- "kredensial tersimpan" dari "sedang dipakai" — admin bisa simpan &
+      -- menguji S3 tapi tetap jalan di lokal, lalu nyalakan/matikan kapan saja
+      -- tanpa isi ulang access/secret key (lihat ubahModeS3() di pengaturan.ts).
+      ALTER TABLE pengaturan ADD COLUMN s3_mode TEXT NOT NULL DEFAULT 'lokal' CHECK (s3_mode IN ('lokal','s3'));
+
+      -- Instalasi yang sudah punya konfigurasi S3 lengkap SEBELUM migrasi ini
+      -- otomatis dianggap mode 's3' — supaya update tidak diam-diam memindahkan
+      -- gambar baru mereka ke disk lokal.
+      UPDATE pengaturan SET s3_mode = 's3'
+      WHERE s3_endpoint IS NOT NULL AND s3_endpoint <> ''
+        AND s3_bucket IS NOT NULL AND s3_bucket <> ''
+        AND s3_access_key IS NOT NULL AND s3_access_key <> ''
+        AND s3_secret_key IS NOT NULL AND s3_secret_key <> '';
+    `,
+  },
 ];
 
 /**

@@ -25,6 +25,7 @@ import {
   hapusKonfigS3,
   ubahKonfigS3,
   ubahLogo,
+  ubahModeS3,
   ubahNamaAplikasi,
   type DataUbahS3,
 } from '../../layanan/pengaturan.js';
@@ -348,6 +349,35 @@ export async function ruteAdmin(app: FastifyInstance): Promise<void> {
         'aplikasi',
         null,
         'Konfigurasi S3 dihapus — gambar baru kembali disimpan di disk lokal',
+      );
+      return { pengaturan };
+    } catch (e) {
+      balas.status(statusDariGalat(e));
+      return { galat: keGalatKirim(e) };
+    }
+  });
+
+  /**
+   * Pindah mode penyimpanan aktif (lokal/S3) — TERPISAH dari menyimpan
+   * kredensial (`PATCH /pengaturan/s3` di atas). Menyimpan field S3 tidak lagi
+   * otomatis mengaktifkannya; admin memilih eksplisit lewat sini, dan `ubahModeS3`
+   * menolak pindah ke 's3' kalau kredensial belum lengkap.
+   */
+  app.patch<{ Body: { mode?: 'lokal' | 's3' } }>('/api/admin/pengaturan/s3/mode', async (req, balas) => {
+    try {
+      const adminId = adminIdWajib(req);
+      const mode = req.body?.mode;
+      if (mode !== 'lokal' && mode !== 's3') {
+        throw galatValidasi('Mode harus "lokal" atau "s3".');
+      }
+      const pengaturan = ubahModeS3(mode);
+      catatLogAdmin(
+        adminId,
+        cariGuruById(adminId)?.nama ?? `#${adminId}`,
+        'ubah_pengaturan_s3',
+        'aplikasi',
+        null,
+        mode === 's3' ? 'Penyimpanan gambar dipindah ke S3' : 'Penyimpanan gambar dipindah ke disk lokal',
       );
       return { pengaturan };
     } catch (e) {
